@@ -1,1 +1,1 @@
-La imagenes se guardan localmente , por ende se llenara rapido el espacio
+La aplicación utiliza useLocalStorage de @/hooks/use-local-storage para almacenar datos del usuario, incluidas las imágenes faciales capturadas (como faceImageUri) y los descriptores faciales (faceDescriptor),por ende se llenara rapido el espacio.
