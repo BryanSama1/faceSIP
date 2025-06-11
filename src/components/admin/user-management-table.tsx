@@ -34,19 +34,19 @@ export default function UserManagementTable() {
     setNewFaceUri(dataUrl);
     setNewFaceDescriptor(descriptor);
      if (descriptor) {
-      toast({ title: "New Face Processed", description: "New face image and descriptor ready for update." });
+      toast({ title: "Nuevo Rostro Procesado", description: "Nueva imagen facial y descriptor listos para actualizar." });
     } else {
-      toast({ title: "Face Captured (No Descriptor)", description: "New face image captured, but descriptor could not be computed. Try again for reliable recognition.", variant: "default", duration: 7000 });
+      toast({ title: "Rostro Capturado (Sin Descriptor)", description: "Nueva imagen facial capturada, pero no se pudo calcular el descriptor. Intenta de nuevo para un reconocimiento fiable.", variant: "default", duration: 7000 });
     }
   };
 
   const handleUpdateUserFace = async () => {
     if (!selectedUser || !newFaceUri) {
-        toast({title: "Missing Data", description: "No new face image captured.", variant: "destructive"});
+        toast({title: "Datos Faltantes", description: "No se capturó una nueva imagen facial.", variant: "destructive"});
         return;
     }
     if (!newFaceDescriptor) {
-        toast({title: "Missing Descriptor", description: "Facial descriptor for the new image is missing. Please recapture clearly.", variant: "destructive"});
+        toast({title: "Descriptor Faltante", description: "Falta el descriptor facial para la nueva imagen. Por favor, captura de nuevo con claridad.", variant: "destructive"});
         return;
     }
 
@@ -55,14 +55,14 @@ export default function UserManagementTable() {
     try {
       const success = await updateUserFaceAdmin(selectedUser.id, newFaceUri, newFaceDescriptor);
       if (success) {
-        toast({ title: "Face Updated", description: `${selectedUser.name}'s login face and descriptor have been updated.` });
+        toast({ title: "Rostro Actualizado", description: `El rostro de inicio de sesión y descriptor de ${selectedUser.name} han sido actualizados.` });
         setIsDialogOpen(false); 
       } else {
         // Error toasts are handled by updateUserFaceAdmin in auth context
       }
     } catch (error) {
       console.error("Error updating face:", error);
-      toast({ title: "Error", description: "An unexpected error occurred.", variant: "destructive" });
+      toast({ title: "Error", description: "Ocurrió un error inesperado.", variant: "destructive" });
     } finally {
       setIsUpdating(false);
     }
@@ -77,21 +77,21 @@ export default function UserManagementTable() {
   };
 
   if (authLoading) return <div className="flex justify-center items-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-  if (!users || users.length === 0) return <p className="text-center text-muted-foreground p-8">No users found.</p>;
+  if (!users || users.length === 0) return <p className="text-center text-muted-foreground p-8">No se encontraron usuarios.</p>;
 
   return (
     <div className="container mx-auto py-8">
-      <h1 className="text-3xl font-headline font-bold mb-6 text-primary">User Management</h1>
+      <h1 className="text-3xl font-headline font-bold mb-6 text-primary">Gestión de Usuarios</h1>
       <Card>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Avatar</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
+              <TableHead>Nombre</TableHead>
+              <TableHead>Correo Electrónico</TableHead>
+              <TableHead>Rol</TableHead>
               <TableHead>Descriptor</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -99,17 +99,17 @@ export default function UserManagementTable() {
               <TableRow key={user.id}>
                 <TableCell>
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={user.enhancedFaceImageUri} alt={user.name} data-ai-hint="profile face"/>
+                    <AvatarImage src={user.enhancedFaceImageUri} alt={user.name} data-ai-hint="rostro perfil"/>
                     <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                   </Avatar>
                 </TableCell>
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.email}</TableCell>
-                <TableCell>{user.isAdmin ? 'Admin' : 'User'}</TableCell>
-                <TableCell>{user.faceDescriptor ? 'Yes' : 'No'}</TableCell>
+                <TableCell>{user.isAdmin ? 'Admin' : 'Usuario'}</TableCell>
+                <TableCell>{user.faceDescriptor ? 'Sí' : 'No'}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="outline" size="sm" onClick={() => handleOpenUpdateDialog(user)}>
-                    <Edit3 className="mr-2 h-4 w-4" /> Update Face
+                    <Edit3 className="mr-2 h-4 w-4" /> Actualizar Rostro
                   </Button>
                 </TableCell>
               </TableRow>
@@ -122,31 +122,31 @@ export default function UserManagementTable() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>Update Face for {selectedUser.name}</DialogTitle>
+              <DialogTitle>Actualizar Rostro para {selectedUser.name}</DialogTitle>
               <DialogDescription>
-                Capture a new face image. This will replace the existing login face and recompute the descriptor.
+                Captura una nueva imagen facial. Esto reemplazará el rostro de inicio de sesión existente y recalculará el descriptor.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-4">
               <div className="flex flex-col items-center">
-                <p className="text-sm font-medium mb-1">Current Enhanced Face:</p>
+                <p className="text-sm font-medium mb-1">Rostro Mejorado Actual:</p>
                 <div className="w-32 h-32 rounded-md overflow-hidden border bg-muted mb-4">
                   {selectedUser.enhancedFaceImageUri ? (
-                    <Image src={selectedUser.enhancedFaceImageUri} alt="Current face" width={128} height={128} className="object-cover w-full h-full" data-ai-hint="person face" />
-                  ) : <div className="w-full h-full flex items-center justify-center text-muted-foreground">No Image</div>}
+                    <Image src={selectedUser.enhancedFaceImageUri} alt="Rostro actual" width={128} height={128} className="object-cover w-full h-full" data-ai-hint="rostro persona" />
+                  ) : <div className="w-full h-full flex items-center justify-center text-muted-foreground">Sin Imagen</div>}
                 </div>
-                <FaceCapture onFaceCaptured={handleFaceCapturedInDialog} imageSize={200} captureButtonText="Capture New Face" />
-                {newFaceUri && newFaceDescriptor && <p className="text-xs text-green-600 mt-2">New face & descriptor captured. Ready for update.</p>}
-                {newFaceUri && !newFaceDescriptor && <p className="text-xs text-amber-600 mt-2">New face captured, descriptor failed. Try retaking.</p>}
+                <FaceCapture onFaceCaptured={handleFaceCapturedInDialog} imageSize={200} captureButtonText="Capturar Nuevo Rostro" />
+                {newFaceUri && newFaceDescriptor && <p className="text-xs text-green-600 mt-2">Nuevo rostro y descriptor capturados. Listo para actualizar.</p>}
+                {newFaceUri && !newFaceDescriptor && <p className="text-xs text-amber-600 mt-2">Rostro capturado, descriptor falló. Intenta de nuevo.</p>}
               </div>
             </div>
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="outline">Cancel</Button>
+                <Button type="button" variant="outline">Cancelar</Button>
               </DialogClose>
               <Button type="button" onClick={handleUpdateUserFace} disabled={isUpdating || !newFaceUri || !newFaceDescriptor}>
                 {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isUpdating ? 'Updating...' : 'Save New Face'}
+                {isUpdating ? 'Actualizando...' : 'Guardar Nuevo Rostro'}
               </Button>
             </DialogFooter>
           </DialogContent>

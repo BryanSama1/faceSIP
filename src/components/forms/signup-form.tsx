@@ -26,24 +26,24 @@ export default function SignupForm() {
     setCapturedFaceUri(dataUrl);
     setFaceDescriptor(descriptor);
     if (descriptor) {
-      toast({ title: "Face Captured", description: "Your face image and descriptor have been processed." });
+      toast({ title: "Rostro Capturado", description: "Tu imagen facial y descriptor han sido procesados." });
     } else {
-      toast({ title: "Face Captured (No Descriptor)", description: "Face image captured, but descriptor could not be computed. Try again with a clearer image for better recognition.", variant: "default", duration: 7000 });
+      toast({ title: "Rostro Capturado (Sin Descriptor)", description: "Imagen facial capturada, pero no se pudo calcular el descriptor. Intenta de nuevo con una imagen más clara para un mejor reconocimiento.", variant: "default", duration: 7000 });
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email) {
-      toast({ title: "Missing Information", description: "Please fill in your name and email.", variant: "destructive" });
+      toast({ title: "Información Faltante", description: "Por favor, completa tu nombre y correo electrónico.", variant: "destructive" });
       return;
     }
     if (!capturedFaceUri) {
-      toast({ title: "Face Capture Required", description: "Please capture your face for registration.", variant: "destructive" });
+      toast({ title: "Se Requiere Captura de Rostro", description: "Por favor, captura tu rostro para el registro.", variant: "destructive" });
       return;
     }
     if (!faceDescriptor) {
-      toast({ title: "Descriptor Missing", description: "Facial descriptor not available. Please recapture your face clearly.", variant: "destructive" });
+      toast({ title: "Falta Descriptor", description: "Descriptor facial no disponible. Por favor, captura tu rostro de nuevo con claridad.", variant: "destructive" });
       return;
     }
 
@@ -52,14 +52,14 @@ export default function SignupForm() {
       const success = await signup(name, email, capturedFaceUri, faceDescriptor);
 
       if (success) {
-        toast({ title: "Signup Successful", description: "Your account has been created. Welcome!" });
+        toast({ title: "Registro Exitoso", description: "Tu cuenta ha sido creada. ¡Bienvenido!" });
         router.push('/dashboard');
       } else {
         // Signup failure toasts are handled within the auth context's signup method
       }
     } catch (error) {
       console.error("Signup error:", error);
-      toast({ title: "Signup Error", description: "An unexpected error occurred. Please try again.", variant: "destructive" });
+      toast({ title: "Error de Registro", description: "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.", variant: "destructive" });
     } finally {
       setIsSigningUp(false);
     }
@@ -68,38 +68,38 @@ export default function SignupForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <Label htmlFor="name" className="font-medium text-foreground">Full Name</Label>
+        <Label htmlFor="name" className="font-medium text-foreground">Nombre Completo</Label>
         <Input
           id="name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="John Doe"
+          placeholder="Juan Pérez"
           required
           className="mt-1"
         />
       </div>
       <div>
-        <Label htmlFor="email" className="font-medium text-foreground">Email Address</Label>
+        <Label htmlFor="email" className="font-medium text-foreground">Dirección de Correo Electrónico</Label>
         <Input
           id="email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
+          placeholder="tu@ejemplo.com"
           required
           className="mt-1"
         />
       </div>
       
       <div className="space-y-2">
-        <Label className="font-medium text-foreground">Register Your Face</Label>
+        <Label className="font-medium text-foreground">Registra Tu Rostro</Label>
         <p className="text-sm text-muted-foreground">
-          This image will be used for logging in. Ensure good lighting and a clear view of your face.
+          Esta imagen se usará para iniciar sesión. Asegura buena iluminación y una vista clara de tu rostro.
         </p>
-        <FaceCapture onFaceCaptured={handleFaceCaptured} captureButtonText="Capture Face & Get Descriptor" />
-        {capturedFaceUri && faceDescriptor && <p className="text-xs text-green-600 text-center">Face and descriptor captured successfully!</p>}
-        {capturedFaceUri && !faceDescriptor && <p className="text-xs text-amber-600 text-center">Face captured, but descriptor failed. Try retaking.</p>}
+        <FaceCapture onFaceCaptured={handleFaceCaptured} captureButtonText="Capturar Rostro y Obtener Descriptor" />
+        {capturedFaceUri && faceDescriptor && <p className="text-xs text-green-600 text-center">¡Rostro y descriptor capturados exitosamente!</p>}
+        {capturedFaceUri && !faceDescriptor && <p className="text-xs text-amber-600 text-center">Rostro capturado, pero el descriptor falló. Intenta de nuevo.</p>}
       </div>
 
       <Button type="submit" disabled={isSigningUp || !capturedFaceUri || !faceDescriptor} className="w-full">
@@ -108,12 +108,12 @@ export default function SignupForm() {
         ) : (
           <UserPlus className="mr-2 h-4 w-4" />
         )}
-        {isSigningUp ? 'Creating Account...' : 'Create Account'}
+        {isSigningUp ? 'Creando Cuenta...' : 'Crear Cuenta'}
       </Button>
       <p className="text-center text-sm text-muted-foreground">
-        Already have an account?{' '}
+        ¿Ya tienes una cuenta?{' '}
         <Link href="/login" className="font-medium text-primary hover:underline">
-          Log in
+          Iniciar Sesión
         </Link>
       </p>
     </form>

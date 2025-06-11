@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -43,13 +44,13 @@ export default function AppHeader() {
             <>
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/dashboard">
-                  <Home className="mr-2 h-4 w-4" /> Dashboard
+                  <Home className="mr-2 h-4 w-4" /> Panel
                 </Link>
               </Button>
               {user.isAdmin && (
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/admin/users">
-                    <ShieldCheck className="mr-2 h-4 w-4" /> Admin Panel
+                    <ShieldCheck className="mr-2 h-4 w-4" /> Panel de Admin
                   </Link>
                 </Button>
               )}
@@ -57,7 +58,7 @@ export default function AppHeader() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-9 w-9 rounded-full">
                     <Avatar className="h-9 w-9">
-                      <AvatarImage src={user.enhancedFaceImageUri} alt={user.name} data-ai-hint="profile picture" />
+                      <AvatarImage src={user.enhancedFaceImageUri} alt={user.name} data-ai-hint="foto perfil" />
                       <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                     </Avatar>
                   </Button>
@@ -74,7 +75,7 @@ export default function AppHeader() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
-                    Log out
+                    Cerrar Sesión
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

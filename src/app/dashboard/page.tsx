@@ -10,7 +10,7 @@ import { CheckCircle } from 'lucide-react';
 export default function DashboardPage() {
   const { user } = useAuth();
 
-  if (!user) return null; // Should be handled by ProtectedPage
+  if (!user) return null; 
 
   const getInitials = (name: string = "") => {
     return name
@@ -27,46 +27,46 @@ export default function DashboardPage() {
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
               <Avatar className="h-24 w-24 border-4 border-primary">
-                <AvatarImage src={user.enhancedFaceImageUri} alt={user.name} data-ai-hint="profile face" />
+                <AvatarImage src={user.enhancedFaceImageUri} alt={user.name} data-ai-hint="rostro perfil" />
                 <AvatarFallback className="text-3xl">{getInitials(user.name)}</AvatarFallback>
               </Avatar>
             </div>
-            <CardTitle className="text-3xl font-headline">Welcome, {user.name}!</CardTitle>
+            <CardTitle className="text-3xl font-headline">¡Bienvenido, {user.name}!</CardTitle>
             <CardDescription className="text-lg text-green-600 flex items-center justify-center gap-2">
-              <CheckCircle className="h-5 w-5" /> You have successfully logged in.
+              <CheckCircle className="h-5 w-5" /> Has iniciado sesión exitosamente.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 pt-4">
             <p className="text-center text-muted-foreground">
-              This is your FaceLog dashboard. Here are the details associated with your account:
+              Este es tu panel de FaceSIP. Aquí están los detalles asociados con tu cuenta:
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
               <div className="flex flex-col items-center p-4 border rounded-lg bg-card-foreground/5">
-                <h3 className="font-semibold mb-3 text-center text-primary">Original Captured Face</h3>
+                <h3 className="font-semibold mb-3 text-center text-primary">Rostro Original Capturado</h3>
                 <div className="aspect-square w-full max-w-[200px] rounded-md overflow-hidden border-2 border-primary/20 bg-muted shadow-md">
                   {user.faceImageUri ? (
-                    <Image src={user.faceImageUri} alt="Original face" width={200} height={200} className="object-cover w-full h-full" data-ai-hint="person face"/>
+                    <Image src={user.faceImageUri} alt="Rostro original" width={200} height={200} className="object-cover w-full h-full" data-ai-hint="rostro persona"/>
                   ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">No image</div>
+                    <div className="flex items-center justify-center h-full text-muted-foreground">Sin imagen</div>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">This is the raw image captured during signup.</p>
+                <p className="text-xs text-muted-foreground mt-2">Esta es la imagen cruda capturada durante el registro.</p>
               </div>
               <div className="flex flex-col items-center p-4 border rounded-lg bg-card-foreground/5">
-                <h3 className="font-semibold mb-3 text-center text-primary">Enhanced Face for Login</h3>
+                <h3 className="font-semibold mb-3 text-center text-primary">Rostro Mejorado para Inicio de Sesión</h3>
                  <div className="aspect-square w-full max-w-[200px] rounded-md overflow-hidden border-2 border-primary/20 bg-muted shadow-md">
                   {user.enhancedFaceImageUri ? (
-                     <Image src={user.enhancedFaceImageUri} alt="Enhanced face" width={200} height={200} className="object-cover w-full h-full" data-ai-hint="profile face" />
+                     <Image src={user.enhancedFaceImageUri} alt="Rostro mejorado" width={200} height={200} className="object-cover w-full h-full" data-ai-hint="rostro perfil" />
                   ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">No image</div>
+                    <div className="flex items-center justify-center h-full text-muted-foreground">Sin imagen</div>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">This AI-enhanced image is used for login.</p>
+                <p className="text-xs text-muted-foreground mt-2">Esta imagen mejorada por IA se usa para el inicio de sesión.</p>
               </div>
             </div>
              {user.isAdmin && (
                 <p className="text-center text-accent-foreground bg-accent/80 p-2 rounded-md font-semibold mt-6">
-                  You have admin privileges. You can manage users from the Admin Panel.
+                  Tienes privilegios de administrador. Puedes gestionar usuarios desde el Panel de Administración.
                 </p>
               )}
           </CardContent>

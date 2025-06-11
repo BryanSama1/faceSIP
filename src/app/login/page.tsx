@@ -3,7 +3,7 @@ import LoginForm from '@/components/forms/login-form';
 
 export default function LoginPage() {
   return (
-    <AuthLayout title="Welcome Back!" subtitle="Log in using your face.">
+    <AuthLayout title="¡Bienvenido de Nuevo!" subtitle="Inicia sesión usando tu rostro.">
       <LoginForm />
     </AuthLayout>
   );

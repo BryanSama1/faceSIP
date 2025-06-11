@@ -3,7 +3,7 @@ import SignupForm from '@/components/forms/signup-form';
 
 export default function SignupPage() {
   return (
-    <AuthLayout title="Create Your Account" subtitle="Join FaceLog with a quick face scan.">
+    <AuthLayout title="Crea Tu Cuenta" subtitle="Únete a FaceSIP con un rápido escaneo facial.">
       <SignupForm />
     </AuthLayout>
   );

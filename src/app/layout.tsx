@@ -4,8 +4,8 @@ import { AuthProvider } from '@/contexts/auth-context';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'FaceLog - Secure Face Recognition Login',
-  description: 'Log in seamlessly and securely with your face.',
+  title: 'FaceSIP - Inicio de Sesión Seguro con Reconocimiento Facial',
+  description: 'Inicia sesión de forma fluida y segura con tu rostro.',
 };
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning={true}>
+    <html lang="es" suppressHydrationWarning={true}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

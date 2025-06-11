@@ -21,7 +21,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const FACE_MATCH_THRESHOLD = 0.55; // Adjusted threshold for potentially better accuracy
+const FACE_MATCH_THRESHOLD = 0.55; 
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [users, setUsers] = useLocalStorage<User[]>('users', []);
@@ -40,7 +40,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return result.enhancedPhotoDataUri;
     } catch (error) {
       console.error("Error enhancing face image:", error);
-      // Toast messages are handled by the calling functions
       return null;
     }
   };
@@ -49,34 +48,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(true);
 
     if (users.length === 0) {
-      toast({ title: "Login Failed", description: "No users are registered. Please sign up.", variant: "destructive" });
+      toast({ title: "Inicio de Sesión Fallido", description: "No hay usuarios registrados. Por favor, regístrate.", variant: "destructive" });
       setLoading(false);
       return false;
     }
 
     if (!capturedFaceDescriptor) {
-      toast({ title: "Login Failed", description: "Could not process face features for login. Please try capturing your face again.", variant: "destructive" });
+      toast({ title: "Inicio de Sesión Fallido", description: "No se pudieron procesar los rasgos faciales para el inicio de sesión. Intenta capturar tu rostro de nuevo.", variant: "destructive" });
       setLoading(false);
       return false;
     }
-
+    
     const enhancedLoginFaceUri = await enhanceAndSetFace(capturedFaceUri);
     if (!enhancedLoginFaceUri) {
-      toast({ title: "Login Failed", description: "Could not process the captured face for recognition. Please ensure your face is clear and well-lit.", variant: "destructive" });
+      toast({ title: "Inicio de Sesión Fallido", description: "No se pudo procesar el rostro capturado para el reconocimiento. Asegúrate de que tu rostro esté claro y bien iluminado.", variant: "destructive" });
       setLoading(false);
       return false;
     }
 
-    // Create LabeledFaceDescriptors for FaceMatcher
+
     const labeledFaceDescriptors = users
       .filter(user => user.faceDescriptor && user.faceDescriptor.length > 0)
       .map(user => new faceapi.LabeledFaceDescriptors(
-        user.id, // Use user ID or email as label
+        user.id, 
         [new Float32Array(user.faceDescriptor!)]
       ));
 
     if (labeledFaceDescriptors.length === 0) {
-        toast({ title: "Login Failed", description: "No registered users have face descriptors for comparison. Please re-register or contact admin.", variant: "destructive" });
+        toast({ title: "Inicio de Sesión Fallido", description: "Ningún usuario registrado tiene descriptores faciales para comparación. Vuelve a registrarte o contacta al administrador.", variant: "destructive" });
         setLoading(false);
         return false;
     }
@@ -89,13 +88,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (matchedUser) {
         setCurrentUser(matchedUser);
         setLoading(false);
-        // Toast for successful login is handled by the form
         return true;
       } else {
-         toast({ title: "Login Error", description: "Matched user not found in system.", variant: "destructive" });
+         toast({ title: "Error de Inicio de Sesión", description: "Usuario coincidente no encontrado en el sistema.", variant: "destructive" });
       }
     } else {
-      toast({ title: "Login Failed", description: "Face not recognized. Please ensure you are a registered user and try again.", variant: "destructive" });
+      toast({ title: "Inicio de Sesión Fallido", description: "Rostro no reconocido. Asegúrate de ser un usuario registrado e inténtalo de nuevo.", variant: "destructive" });
     }
 
     setLoading(false);
@@ -106,20 +104,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(true);
     if (users.find(u => u.email === email)) {
       setLoading(false);
-      toast({title: "Signup Failed", description: "User with this email already exists.", variant: "destructive"});
+      toast({title: "Registro Fallido", description: "Ya existe un usuario con este correo electrónico.", variant: "destructive"});
       return false;
     }
 
     if (!faceDescriptor) {
         setLoading(false);
-        toast({title: "Signup Failed", description: 'Could not compute facial descriptor. Please try capturing your face again.', variant: "destructive"});
+        toast({title: "Registro Fallido", description: 'No se pudo calcular el descriptor facial. Intenta capturar tu rostro de nuevo.', variant: "destructive"});
         return false;
     }
 
     const enhancedFaceImageUri = await enhanceAndSetFace(faceImageUri);
     if (!enhancedFaceImageUri) {
       setLoading(false);
-      toast({title: "Signup Failed", description: 'Failed to enhance face image. Please try again with a clearer picture.', variant: "destructive"});
+      toast({title: "Registro Fallido", description: 'Falló la mejora de la imagen facial. Intenta de nuevo con una imagen más clara.', variant: "destructive"});
       return false;
     }
 
@@ -130,7 +128,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       faceImageUri,
       enhancedFaceImageUri,
       faceDescriptor,
-      isAdmin: users.length === 0, // First user is admin
+      isAdmin: users.length === 0, 
     };
     setUsers([...users, newUser]);
     setCurrentUser(newUser); 
@@ -147,20 +145,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const userIndex = users.findIndex(u => u.id === userId);
     if (userIndex === -1) {
       setLoading(false);
-      toast({title: "Update Failed", description: "User not found.", variant: "destructive"});
+      toast({title: "Actualización Fallida", description: "Usuario no encontrado.", variant: "destructive"});
       return false;
     }
 
     if (!newFaceDescriptor) {
         setLoading(false);
-        toast({title: "Update Failed", description: 'Could not compute new facial descriptor. Please try capturing again.', variant: "destructive"});
+        toast({title: "Actualización Fallida", description: 'No se pudo calcular el nuevo descriptor facial. Intenta capturar de nuevo.', variant: "destructive"});
         return false;
     }
 
     const enhancedUri = await enhanceAndSetFace(newFaceImageUri);
     if (!enhancedUri) {
       setLoading(false);
-      toast({title: "Update Failed", description: 'Failed to enhance new face image. Please ensure the image is clear.', variant: "destructive"});
+      toast({title: "Actualización Fallida", description: 'Falló la mejora de la nueva imagen facial. Asegúrate de que la imagen sea clara.', variant: "destructive"});
       return false;
     }
 
@@ -192,8 +190,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth debe ser usado dentro de un AuthProvider');
   }
   return context;
 };
-

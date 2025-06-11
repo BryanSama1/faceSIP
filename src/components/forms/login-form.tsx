@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import FaceCapture from '@/components/face/face-capture';
@@ -23,7 +23,7 @@ export default function LoginForm() {
     setCapturedFaceUri(dataUrl);
     setCapturedFaceDescriptor(descriptor);
     if (!descriptor) {
-        toast({title: "Face Processing Issue", description: "Could not compute facial features from the captured image. Please try again with a clearer view of your face.", variant: "default", duration: 7000});
+        toast({title: "Problema al Procesar Rostro", description: "No se pudieron calcular los rasgos faciales de la imagen capturada. Intenta de nuevo con una vista más clara de tu rostro.", variant: "default", duration: 7000});
     }
   };
 
@@ -31,15 +31,15 @@ export default function LoginForm() {
     e.preventDefault();
     
     if (!authLoading && users.length === 0) {
-      toast({ title: "Login Not Possible", description: "No users are registered in the system. Please sign up first.", variant: "destructive" });
+      toast({ title: "Inicio de Sesión No Posible", description: "No hay usuarios registrados en el sistema. Por favor, regístrate primero.", variant: "destructive" });
       return;
     }
     if (!capturedFaceUri) {
-      toast({ title: "Face Capture Required", description: "Please capture your face to log in.", variant: "destructive" });
+      toast({ title: "Se Requiere Captura de Rostro", description: "Por favor, captura tu rostro para iniciar sesión.", variant: "destructive" });
       return;
     }
     if (!capturedFaceDescriptor) {
-      toast({ title: "Face Features Required", description: "Facial features could not be processed. Please recapture your face clearly.", variant: "destructive" });
+      toast({ title: "Se Requieren Rasgos Faciales", description: "Los rasgos faciales no pudieron ser procesados. Por favor, captura tu rostro de nuevo con claridad.", variant: "destructive" });
       return;
     }
 
@@ -47,54 +47,53 @@ export default function LoginForm() {
     try {
       const success = await loginWithFace(capturedFaceUri, capturedFaceDescriptor);
       if (success) {
-        toast({ title: "Login Successful", description: "Welcome back!" });
+        toast({ title: "Inicio de Sesión Exitoso", description: "¡Bienvenido de nuevo!" });
         router.push('/dashboard');
       } else {
-        // Specific failure toasts are handled within loginWithFace (e.g., "Face not recognized")
+        // Specific failure toasts are handled within loginWithFace
         setCapturedFaceUri(null); 
         setCapturedFaceDescriptor(null);
       }
     } catch (error) {
       console.error("Login error:", error);
-      toast({ title: "Login Error", description: "An unexpected error occurred. Please try again.", variant: "destructive" });
+      toast({ title: "Error de Inicio de Sesión", description: "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.", variant: "destructive" });
     } finally {
       setIsLoggingIn(false);
     }
   };
 
-  const canAttemptLogin = !!capturedFaceUri && !!capturedFaceDescriptor && (!authLoading && users.length > 0);
+  const canAttemptLogin = !!capturedFaceUri && !!capturedFaceDescriptor && !authLoading;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
-        <Label className="font-medium text-foreground text-center block">Log In with Your Face</Label>
+        <Label className="font-medium text-foreground text-center block">Inicia Sesión con Tu Rostro</Label>
         <p className="text-sm text-muted-foreground text-center">
-          Your face will be matched against registered users.
+          Tu rostro se comparará con los usuarios registrados.
         </p>
-        <FaceCapture onFaceCaptured={handleFaceCaptured} captureButtonText="Capture Face for Login" />
-        {capturedFaceUri && capturedFaceDescriptor && <p className="text-xs text-green-600 text-center flex items-center justify-center gap-1"><UserCheck size={14}/> Face & features captured!</p>}
-        {capturedFaceUri && !capturedFaceDescriptor && <p className="text-xs text-amber-600 text-center">Face captured, but features unclear. Retake.</p>}
+        <FaceCapture onFaceCaptured={handleFaceCaptured} captureButtonText="Capturar Rostro para Iniciar Sesión" />
+        {capturedFaceUri && capturedFaceDescriptor && <p className="text-xs text-green-600 text-center flex items-center justify-center gap-1"><UserCheck size={14}/> ¡Rostro y rasgos capturados!</p>}
+        {capturedFaceUri && !capturedFaceDescriptor && <p className="text-xs text-amber-600 text-center">Rostro capturado, pero rasgos no claros. Intenta de nuevo.</p>}
         
         {!authLoading && users.length === 0 && !isLoggingIn && (
-           <p className="text-xs text-amber-600 text-center pt-2">No users registered. Please sign up.</p>
+           <p className="text-xs text-amber-600 text-center pt-2">No hay usuarios registrados. Por favor, regístrate.</p>
         )}
       </div>
 
-      <Button type="submit" disabled={isLoggingIn || !canAttemptLogin} className="w-full">
+      <Button type="submit" disabled={isLoggingIn || !canAttemptLogin || (users.length === 0 && !authLoading)} className="w-full">
         {isLoggingIn ? (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         ) : (
           <LogIn className="mr-2 h-4 w-4" />
         )}
-        {isLoggingIn ? 'Verifying...' : 'Log In with Face'}
+        {isLoggingIn ? 'Verificando...' : 'Iniciar Sesión con Rostro'}
       </Button>
       <p className="text-center text-sm text-muted-foreground">
-        Don't have an account?{' '}
+        ¿No tienes una cuenta?{' '}
         <Link href="/signup" className="font-medium text-primary hover:underline">
-          Sign up
+          Regístrate
         </Link>
       </p>
     </form>
   );
 }
-
