@@ -12,7 +12,7 @@ export default {
       fontFamily: {
         body: ['Inter', 'sans-serif'],
         headline: ['Inter', 'sans-serif'],
-        code: ['monospace'],
+        code: ['monospace', 'monospace'],
       },
       colors: {
         background: 'hsl(var(--background))',
@@ -88,10 +88,15 @@ export default {
             height: '0',
           },
         },
+        'pulse-border': {
+          '0%, 100%': { borderColor: 'hsl(var(--accent))' },
+          '50%': { borderColor: 'hsl(var(--primary))' },
+        }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'pulse-border': 'pulse-border 2s infinite ease-in-out',
       },
     },
   },
