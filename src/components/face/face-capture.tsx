@@ -30,6 +30,8 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState<string>("Initializing...");
+  const [isFaceDetected, setIsFaceDetected] = useState(false);
+
 
   const { toast } = useToast();
 
@@ -53,20 +55,18 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     try {
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-        // faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL), // Example if landmarks were needed
-        // faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL) // Example if recognition features were needed
       ]);
       setModelsLoaded(true);
       setDetectionStatus("Models loaded. Ready for face detection.");
       console.log("FaceCapture: Models loaded successfully.");
     } catch (e) {
       console.error("FaceCapture: Error loading models: ", e);
-      const errorMsg = `Failed to load face detection models from ${MODEL_URL}/tiny_face_detector_model-weights_manifest.json (or related files). Real-time face outlines will NOT work.`;
+      const errorMsg = `Failed to load face detection models from ${MODEL_URL}/tiny_face_detector_model-weights_manifest.json (or related files). Real-time face outlines will NOT work. Please ensure model files are in 'public/models/'. Check browser Network tab for 404 errors.`;
       setError(errorMsg);
-      setDetectionStatus("Error: Models not found. Check `public/models/` folder. See browser Network tab for 404 errors.");
+      setDetectionStatus("Error: Models not found. Check `public/models/` and Network tab for 404s on 'tiny_face_detector_model-weights_manifest.json'.");
       toast({
         title: "Face Detection Model Error (404)",
-        description: `Could not load required model files (e.g., 'tiny_face_detector_model-weights_manifest.json') from the ${MODEL_URL}/ path. Please ensure these files are correctly placed in your project's 'public/models/' directory. Check your browser's Network tab for specific 404 errors on model files. Real-time face outlines are unavailable.`,
+        description: `Could not load 'tiny_face_detector_model-weights_manifest.json' from ${MODEL_URL}/. Ensure it and related shard files are in your project's 'public/models/' directory. Check browser's Network tab for details. Real-time face outlines are unavailable.`,
         variant: "destructive",
         duration: 15000
       });
@@ -92,7 +92,8 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       console.log("FaceCapture: Media stream tracks stopped.");
     }
     setStream(null);
-    setIsCameraActive(false); // Ensure camera active state is updated
+    setIsCameraActive(false); 
+    setIsFaceDetected(false);
   }, []);
 
   const startDetection = useCallback(() => {
@@ -115,10 +116,12 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     detectionIntervalRef.current = setInterval(async () => {
       if (video.paused || video.ended || !isCameraActiveRef.current) {
         if(detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
+        setIsFaceDetected(false);
         return;
       }
 
       const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }));
+      setIsFaceDetected(detections.length > 0);
 
       const resizedDetections = faceapi.resizeResults(detections, displaySize);
       const context = canvas.getContext('2d');
@@ -146,6 +149,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     setImageDataUrl(null); 
     setIsStartingCamera(true);
     setIsCameraActive(false); 
+    setIsFaceDetected(false);
     console.log("FaceCapture: Set isStartingCamera to true.");
 
     try {
@@ -234,7 +238,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   }, [stopCamera]);
 
   const captureFace = () => {
-    if (videoRef.current && canvasRef.current && stream && isCameraActive) {
+    if (videoRef.current && canvasRef.current && stream && isCameraActive && isFaceDetected) {
       setIsTakingPicture(true);
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -252,6 +256,8 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       setIsTakingPicture(false);
     } else if (!isCameraActive) {
         toast({ title: "Camera Off", description: "Please start the camera first.", variant: "destructive" });
+    } else if (!isFaceDetected) {
+        toast({ title: "No Face Detected", description: "Please ensure your face is clearly visible in the frame.", variant: "destructive" });
     }
   };
 
@@ -265,6 +271,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   const handleRetake = () => {
     setImageDataUrl(null);
     setError(null); 
+    setIsFaceDetected(false);
 
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
@@ -323,13 +330,22 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
 
 
   const showVideoFeed = isCameraActive && !imageDataUrl;
+  let captureButtonDynamicText = captureButtonText;
+  if (showVideoFeed && modelsLoaded && !isFaceDetected) {
+    captureButtonDynamicText = "Position Face in Frame";
+  } else if (showVideoFeed && !modelsLoaded && !detectionStatus.startsWith("Error:")) {
+    captureButtonDynamicText = "Models Loading...";
+  } else if (showVideoFeed && !modelsLoaded && detectionStatus.startsWith("Error:")) {
+    captureButtonDynamicText = "Detector Models Missing";
+  }
+
 
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-md">
       <div
         className="relative rounded-lg overflow-hidden border-2 border-dashed border-primary bg-muted data-[capturing=true]:animate-pulse-border"
         style={previewStyle}
-        data-capturing={showVideoFeed && !isTakingPicture}
+        data-capturing={showVideoFeed && !isTakingPicture && modelsLoaded && isFaceDetected}
       >
         <video
           ref={videoRef}
@@ -367,6 +383,11 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
                 {detectionStatus}
             </div>
         )}
+         {showVideoFeed && modelsLoaded && !isFaceDetected && !isStartingCamera && (
+          <div className="absolute bottom-2 left-2 right-2 bg-amber-500/80 text-white text-xs p-1 rounded text-center font-medium">
+            Position your face in the frame.
+          </div>
+        )}
       </div>
       <canvas ref={canvasRef} className="hidden"></canvas>
 
@@ -379,9 +400,9 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       )}
 
       {showVideoFeed && (
-        <Button onClick={captureFace} disabled={isTakingPicture || !modelsLoaded} className="w-full bg-accent hover:bg-accent/90">
+        <Button onClick={captureFace} disabled={isTakingPicture || !modelsLoaded || !isFaceDetected} className="w-full bg-accent hover:bg-accent/90">
           {isTakingPicture ? <Loader2 size={18} className="mr-2 animate-spin" /> : <ScanFace size={18} className="mr-2" />}
-          {isTakingPicture ? 'Capturing...' : (modelsLoaded ? captureButtonText : 'Detector Models Missing/Loading...')}
+          {isTakingPicture ? 'Capturing...' : captureButtonDynamicText}
         </Button>
       )}
 
@@ -402,6 +423,3 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
 };
 
 export default FaceCapture;
-
-
-    
