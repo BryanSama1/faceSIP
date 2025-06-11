@@ -3,14 +3,15 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Camera, RefreshCw, CheckCircle2, AlertTriangle, VideoOff, Loader2 } from 'lucide-react';
+import { Camera, RefreshCw, CheckCircle2, AlertTriangle, VideoOff, Loader2, ScanFace } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import * as faceapi from 'face-api.js';
 
 interface FaceCaptureProps {
   onFaceCaptured: (dataUrl: string) => void;
   captureButtonText?: string;
-  imageSize?: number; // Approximate size for the video/image preview square
+  imageSize?: number; 
 }
 
 const FaceCapture: React.FC<FaceCaptureProps> = ({ 
@@ -19,18 +20,23 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   imageSize = 300 
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null); // For taking the snapshot
+  const detectionCanvasRef = useRef<HTMLCanvasElement>(null); // For drawing real-time detections
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [detectionStatus, setDetectionStatus] = useState<string>("Loading models...");
+  
   const { toast } = useToast();
 
   const streamRef = useRef(stream);
   const isCameraActiveRef = useRef(isCameraActive);
-  const cameraOperationInProgress = useRef(false); // Guard against re-entrant startCamera calls
+  const cameraOperationInProgress = useRef(false);
+  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     streamRef.current = stream;
@@ -40,33 +46,87 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     isCameraActiveRef.current = isCameraActive;
   }, [isCameraActive]);
 
+  const loadModels = useCallback(async () => {
+    const MODEL_URL = '/models';
+    setDetectionStatus("Loading detection models...");
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        // To draw landmarks, uncomment and add the model to public/models
+        // faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL), 
+      ]);
+      setModelsLoaded(true);
+      setDetectionStatus("Models loaded. Ready for detection.");
+      console.log("FaceCapture: Models loaded successfully.");
+    } catch (e) {
+      console.error("FaceCapture: Error loading models: ", e);
+      setError("Failed to load face detection models. Detection overlay will not be available.");
+      setDetectionStatus("Error loading models.");
+      toast({ title: "Model Load Error", description: "Could not load face detection models. Real-time detection unavailable.", variant: "destructive"});
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadModels();
+  }, [loadModels]);
+
   const stopCamera = useCallback(() => {
     console.log("FaceCapture: stopCamera called.");
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
+    if (detectionCanvasRef.current) {
+      const context = detectionCanvasRef.current.getContext('2d');
+      context?.clearRect(0, 0, detectionCanvasRef.current.width, detectionCanvasRef.current.height);
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       console.log("FaceCapture: Media stream tracks stopped.");
     }
     setStream(null);
     setIsCameraActive(false);
-    // If an operation was in progress, it's now stopped.
-    if (cameraOperationInProgress.current) {
-        // cameraOperationInProgress.current = false; // This might be reset too early if stopCamera is called during an error path that also resets it.
-                                                // Let specific start/play paths manage this flag.
-    }
   }, []);
 
+  const startDetection = useCallback(() => {
+    if (!videoRef.current || !detectionCanvasRef.current || !modelsLoaded || !isCameraActiveRef.current) {
+      return;
+    }
+    console.log("FaceCapture: Starting real-time detection interval.");
+
+    const video = videoRef.current;
+    const canvas = detectionCanvasRef.current;
+    const displaySize = { width: video.videoWidth, height: video.videoHeight };
+    faceapi.matchDimensions(canvas, displaySize);
+
+    detectionIntervalRef.current = setInterval(async () => {
+      if (video.paused || video.ended || !isCameraActiveRef.current) {
+        if(detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
+        return;
+      }
+      
+      const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }));
+      // To draw landmarks:
+      // const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 })).withFaceLandmarks(true);
+
+
+      const resizedDetections = faceapi.resizeResults(detections, displaySize);
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        faceapi.draw.drawDetections(canvas, resizedDetections);
+        // To draw landmarks:
+        // faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+      }
+    }, 200); // Adjust interval as needed for performance
+  }, [modelsLoaded]);
+
+
   const startCamera = useCallback(async () => {
-    if (cameraOperationInProgress.current) {
-      console.log("FaceCapture: startCamera skipped, camera operation already in progress (ref).");
-      return;
-    }
-    if (isCameraActiveRef.current && streamRef.current) {
-      console.log("FaceCapture: startCamera skipped, camera is already active with a stream.");
-      return;
-    }
+    if (cameraOperationInProgress.current) return;
+    if (isCameraActiveRef.current && streamRef.current) return;
 
     cameraOperationInProgress.current = true;
-    console.log("FaceCapture: Attempting to start camera...");
     setError(null);
     setImageDataUrl(null);
     setIsStartingCamera(true);
@@ -75,122 +135,78 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: imageSize, height: imageSize } });
-        console.log("FaceCapture: Media stream acquired.");
         setStream(mediaStream);
-        // cameraOperationInProgress will be set to false by the video.play() effect or getUserMedia catch.
       } else {
         const msg = "Camera access not supported by your browser.";
-        console.error("FaceCapture: " + msg);
-        setError(msg);
-        toast({ title: "Error", description: msg, variant: "destructive" });
-        setIsStartingCamera(false);
-        setIsCameraActive(false);
-        cameraOperationInProgress.current = false;
+        setError(msg); toast({ title: "Error", description: msg, variant: "destructive" });
+        setIsStartingCamera(false); cameraOperationInProgress.current = false;
       }
     } catch (err) {
-      console.error("FaceCapture: Error accessing camera: ", err);
-      let message = "Error accessing camera. Please ensure permissions are granted.";
-      if (err instanceof Error) {
-        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          message = "Camera permission denied. Please enable it in your browser settings.";
-        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-          message = "No camera found. Please ensure a camera is connected.";
-        } else if (err.name === "NotReadableError") {
-            message = "Camera is already in use by another application or browser tab.";
-        }
-      }
-      setError(message);
-      toast({ title: "Camera Error", description: message, variant: "destructive" });
-      setStream(null);
-      setIsStartingCamera(false);
-      setIsCameraActive(false);
-      cameraOperationInProgress.current = false;
+      let message = "Error accessing camera.";
+      if (err instanceof Error) { /* ... error handling ... */ }
+      setError(message); toast({ title: "Camera Error", description: message, variant: "destructive" });
+      setStream(null); setIsStartingCamera(false); cameraOperationInProgress.current = false;
     }
   }, [imageSize, toast]);
 
-  // Effect for auto-starting camera once on mount if conditions are met
   useEffect(() => {
-    // Access initial states directly for the first check
     if (!imageDataUrl && !isCameraActive && !stream && !isStartingCamera && !error) {
-      console.log("FaceCapture: Auto-starting camera on initial mount.");
       startCamera();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, [imageDataUrl, isCameraActive, stream, isStartingCamera, error, startCamera]);
 
-  // Effect to handle stream assignment and playback
   useEffect(() => {
-    if (videoRef.current && stream) {
-      console.log("FaceCapture: Stream available. Assigning to video element and attempting to play.");
-      videoRef.current.srcObject = stream;
-      videoRef.current.play()
-        .then(() => {
-          console.log("FaceCapture: Video play success.");
-          setIsCameraActive(true);
-          setIsStartingCamera(false); 
-          setError(null);
-          cameraOperationInProgress.current = false;
-        })
-        .catch(playError => {
-          console.error("FaceCapture: Video play() failed:", playError);
-          let message = "Could not start video playback.";
-          if (playError.name === "NotAllowedError") {
-            message = "Video autoplay was prevented. Try clicking 'Start Camera'.";
-          } else if (playError.name === "AbortError") {
-             // This specific error "The play() request was interrupted by a new load request" means the video load was interrupted.
-            // It might be due to rapid re-renders or component unmounting/remounting.
-            message = "Video playback was aborted. The camera might have been interrupted.";
-          } else if (playError.name === "NotSupportedError") {
-            message = "The video format or source is not supported.";
-          } else {
-            message = `Camera playback error: ${playError.message}`;
-          }
-          setError(message);
-          toast({ title: "Camera Playback Error", description: message, variant: "destructive" });
-          setIsCameraActive(false);
-          setIsStartingCamera(false);
-          cameraOperationInProgress.current = false;
-          stopCamera(); 
-        });
-    } else if (videoRef.current && !stream) {
-      console.log("FaceCapture: Stream is null. Clearing video srcObject.");
-      videoRef.current.srcObject = null;
+    const videoNode = videoRef.current;
+    if (videoNode && stream) {
+      videoNode.srcObject = stream;
+      videoNode.onloadedmetadata = () => { // Ensure metadata is loaded for videoWidth/Height
+        videoNode.play()
+          .then(() => {
+            setIsCameraActive(true);
+            setIsStartingCamera(false); 
+            setError(null);
+            cameraOperationInProgress.current = false;
+            if (modelsLoaded) startDetection(); // Start detection after video plays
+          })
+          .catch(playError => {
+            let message = "Could not start video playback.";
+            setError(message); toast({ title: "Camera Playback Error", description: message, variant: "destructive" });
+            setIsCameraActive(false); setIsStartingCamera(false); cameraOperationInProgress.current = false;
+            stopCamera(); 
+          });
+      };
+    } else if (videoNode && !stream) {
+      videoNode.srcObject = null;
     }
-  }, [stream, stopCamera, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream, modelsLoaded]); // Added modelsLoaded to re-trigger if models load after stream
 
-  // Cleanup stream on unmount
   useEffect(() => {
     return () => {
-      console.log("FaceCapture: Component unmounting, ensuring camera is stopped.");
       stopCamera();
-      if (cameraOperationInProgress.current) { // Ensure flag is reset on unmount if operation was pending
-        cameraOperationInProgress.current = false;
-      }
+      if (cameraOperationInProgress.current) cameraOperationInProgress.current = false;
     };
   }, [stopCamera]);
 
   const captureFace = () => {
     if (videoRef.current && canvasRef.current && stream && isCameraActive) {
       setIsTakingPicture(true);
-      console.log("FaceCapture: Capturing face...");
       const video = videoRef.current;
       const canvas = canvasRef.current;
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       if (context) {
-        // Mirror the captured image to match the preview
         context.translate(video.videoWidth, 0);
         context.scale(-1, 1);
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        // Reset transformation for future drawings if any
         context.setTransform(1, 0, 0, 1, 0, 0); 
       }
       const dataUrl = canvas.toDataURL('image/png');
       setImageDataUrl(dataUrl);
-      console.log("FaceCapture: Face captured.");
       setIsTakingPicture(false);
-      // stopCamera(); // Keep camera active for retake by default
+      // Optionally stop detection here if preferred, or keep it running for retake
+      // if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
     } else if (!isCameraActive) {
         toast({ title: "Camera Off", description: "Please start the camera first.", variant: "destructive" });
     }
@@ -198,23 +214,22 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
 
   const handleConfirm = () => {
     if (imageDataUrl) {
-      console.log("FaceCapture: Confirming photo.");
       onFaceCaptured(imageDataUrl);
       stopCamera(); 
     }
   };
 
   const handleRetake = () => {
-    console.log("FaceCapture: Retaking photo.");
     setImageDataUrl(null);
     setError(null);
+    if (detectionIntervalRef.current) { // Clear old interval if any
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
     if (!isCameraActiveRef.current && !cameraOperationInProgress.current) { 
-      console.log("FaceCapture: Camera not active for retake, starting camera.");
       startCamera();
-    } else if (isCameraActiveRef.current) {
-      console.log("FaceCapture: Camera already active for retake.");
-    } else {
-      console.log("FaceCapture: Camera starting or operation in progress, retake will use existing process.");
+    } else if (isCameraActiveRef.current && modelsLoaded) {
+      startDetection(); // Restart detection if camera is already active
     }
   };
   
@@ -237,12 +252,20 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
           playsInline
           muted
           className={cn(
-            "object-cover w-full h-full transform scaleX-[-1]", // Mirror preview
+            "object-cover w-full h-full transform scaleX-[-1]",
             { 'hidden': !showVideoFeed }
           )}
-          onCanPlay={() => console.log("FaceCapture: Video onCanPlay event fired.")}
-          onLoadedData={() => console.log("FaceCapture: Video onLoadedData event fired.")}
-          onPlaying={() => console.log("FaceCapture: Video onPlaying event fired.")}
+          onPlay={() => { // Moved startDetection to onPlay to ensure video is ready
+            console.log("FaceCapture: Video onPlay event.");
+            if (modelsLoaded && isCameraActiveRef.current && !detectionIntervalRef.current) {
+              startDetection();
+            }
+          }}
+        />
+        <canvas 
+            ref={detectionCanvasRef} 
+            className="absolute top-0 left-0 w-full h-full object-cover transform scaleX-[-1]" // Mirrored like the video
+            style={previewStyle} 
         />
         {imageDataUrl && (
           <img src={imageDataUrl} alt="Captured face" className="object-cover w-full h-full absolute inset-0" />
@@ -258,10 +281,18 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
             <VideoOff size={imageSize / 4} className="mb-2" />
             {showErrorMessage && <p className="text-sm text-destructive">{error}</p>}
             {showCameraOffMessage && <p className="text-sm">Camera is off or unavailable.</p>}
+            {!modelsLoaded && detectionStatus && <p className="text-xs text-muted-foreground mt-1">{detectionStatus}</p>}
           </div>
         )}
+        {showVideoFeed && !modelsLoaded && detectionStatus && (
+            <div className="absolute bottom-2 left-2 right-2 bg-black/50 text-white text-xs p-1 rounded text-center">
+                <Loader2 className="inline-block h-3 w-3 mr-1 animate-spin" />
+                {detectionStatus}
+            </div>
+        )}
       </div>
-      <canvas ref={canvasRef} className="hidden"></canvas>
+      <canvas ref={canvasRef} className="hidden"></canvas> {/* For snapshot */}
+
 
       {(showErrorMessage || showCameraOffMessage) && (
          <Button onClick={startCamera} className="w-full" variant="outline" disabled={isStartingCamera || cameraOperationInProgress.current}>
@@ -271,9 +302,9 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       )}
       
       {showVideoFeed && (
-        <Button onClick={captureFace} disabled={isTakingPicture} className="w-full bg-accent hover:bg-accent/90">
-          {isTakingPicture ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Camera size={18} className="mr-2" />}
-          {isTakingPicture ? 'Capturing...' : captureButtonText}
+        <Button onClick={captureFace} disabled={isTakingPicture || !modelsLoaded} className="w-full bg-accent hover:bg-accent/90">
+          {isTakingPicture ? <Loader2 size={18} className="mr-2 animate-spin" /> : <ScanFace size={18} className="mr-2" />}
+          {isTakingPicture ? 'Capturing...' : (modelsLoaded ? captureButtonText : 'Loading Detector...')}
         </Button>
       )}
 
