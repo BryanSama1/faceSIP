@@ -28,22 +28,17 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const { toast } = useToast();
 
-  // Refs to hold current state values for use in useCallback without causing dependency loops
-  const isStartingCameraRef = useRef(isStartingCamera);
-  const isCameraActiveRef = useRef(isCameraActive);
   const streamRef = useRef(stream);
-
-  useEffect(() => {
-    isStartingCameraRef.current = isStartingCamera;
-  }, [isStartingCamera]);
-
-  useEffect(() => {
-    isCameraActiveRef.current = isCameraActive;
-  }, [isCameraActive]);
+  const isCameraActiveRef = useRef(isCameraActive);
+  const cameraOperationInProgress = useRef(false); // Guard against re-entrant startCamera calls
 
   useEffect(() => {
     streamRef.current = stream;
   }, [stream]);
+
+  useEffect(() => {
+    isCameraActiveRef.current = isCameraActive;
+  }, [isCameraActive]);
 
   const stopCamera = useCallback(() => {
     console.log("FaceCapture: stopCamera called.");
@@ -53,29 +48,36 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     }
     setStream(null);
     setIsCameraActive(false);
-    // setIsStartingCamera(false); // Only set starting to false if it was in a starting process that's now aborted.
-                               // Generally, start/stop are distinct actions from the 'starting' phase.
+    // If an operation was in progress, it's now stopped.
+    if (cameraOperationInProgress.current) {
+        // cameraOperationInProgress.current = false; // This might be reset too early if stopCamera is called during an error path that also resets it.
+                                                // Let specific start/play paths manage this flag.
+    }
   }, []);
 
-
   const startCamera = useCallback(async () => {
-    if (isStartingCameraRef.current || (isCameraActiveRef.current && streamRef.current)) {
-      console.log("FaceCapture: startCamera skipped, already starting or active with stream.");
+    if (cameraOperationInProgress.current) {
+      console.log("FaceCapture: startCamera skipped, camera operation already in progress (ref).");
+      return;
+    }
+    if (isCameraActiveRef.current && streamRef.current) {
+      console.log("FaceCapture: startCamera skipped, camera is already active with a stream.");
       return;
     }
 
+    cameraOperationInProgress.current = true;
     console.log("FaceCapture: Attempting to start camera...");
     setError(null);
     setImageDataUrl(null);
     setIsStartingCamera(true);
-    setIsCameraActive(false); // Explicitly set camera to not active before attempting to start
+    setIsCameraActive(false);
 
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: imageSize, height: imageSize } });
         console.log("FaceCapture: Media stream acquired.");
         setStream(mediaStream);
-        // setIsStartingCamera will be set to false by the effect that handles video.play()
+        // cameraOperationInProgress will be set to false by the video.play() effect or getUserMedia catch.
       } else {
         const msg = "Camera access not supported by your browser.";
         console.error("FaceCapture: " + msg);
@@ -83,6 +85,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
         toast({ title: "Error", description: msg, variant: "destructive" });
         setIsStartingCamera(false);
         setIsCameraActive(false);
+        cameraOperationInProgress.current = false;
       }
     } catch (err) {
       console.error("FaceCapture: Error accessing camera: ", err);
@@ -101,8 +104,19 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       setStream(null);
       setIsStartingCamera(false);
       setIsCameraActive(false);
+      cameraOperationInProgress.current = false;
     }
-  }, [imageSize, toast]); // Removed state refs from here, they are accessed via .current
+  }, [imageSize, toast]);
+
+  // Effect for auto-starting camera once on mount if conditions are met
+  useEffect(() => {
+    // Access initial states directly for the first check
+    if (!imageDataUrl && !isCameraActive && !stream && !isStartingCamera && !error) {
+      console.log("FaceCapture: Auto-starting camera on initial mount.");
+      startCamera();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array ensures this runs once on mount
 
   // Effect to handle stream assignment and playback
   useEffect(() => {
@@ -113,46 +127,45 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
         .then(() => {
           console.log("FaceCapture: Video play success.");
           setIsCameraActive(true);
-          setIsStartingCamera(false); // Camera is now active, no longer "starting"
-          setError(null); // Clear any previous errors
+          setIsStartingCamera(false); 
+          setError(null);
+          cameraOperationInProgress.current = false;
         })
         .catch(playError => {
           console.error("FaceCapture: Video play() failed:", playError);
-          let message = "Could not start video playback. Ensure camera is not in use elsewhere.";
+          let message = "Could not start video playback.";
           if (playError.name === "NotAllowedError") {
-            message = "Video autoplay was prevented by the browser. User interaction might be required, or check site permissions.";
+            message = "Video autoplay was prevented. Try clicking 'Start Camera'.";
           } else if (playError.name === "AbortError") {
-            message = "Video playback was aborted. This can happen if you navigate away or another camera request interrupts it.";
+             // This specific error "The play() request was interrupted by a new load request" means the video load was interrupted.
+            // It might be due to rapid re-renders or component unmounting/remounting.
+            message = "Video playback was aborted. The camera might have been interrupted.";
           } else if (playError.name === "NotSupportedError") {
             message = "The video format or source is not supported.";
+          } else {
+            message = `Camera playback error: ${playError.message}`;
           }
           setError(message);
           toast({ title: "Camera Playback Error", description: message, variant: "destructive" });
           setIsCameraActive(false);
           setIsStartingCamera(false);
-          stopCamera(); // Clean up the stream if play fails
+          cameraOperationInProgress.current = false;
+          stopCamera(); 
         });
     } else if (videoRef.current && !stream) {
       console.log("FaceCapture: Stream is null. Clearing video srcObject.");
       videoRef.current.srcObject = null;
-      // setIsCameraActive(false); // This should be handled by stopCamera or when stream is explicitly set to null
     }
   }, [stream, stopCamera, toast]);
-
-  // Auto-start camera attempt
-  useEffect(() => {
-    if (!imageDataUrl && !isCameraActiveRef.current && !streamRef.current && !isStartingCameraRef.current && !error) {
-      console.log("FaceCapture: Auto-starting camera due to initial conditions.");
-      startCamera();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageDataUrl, error, startCamera]); // Dependencies are state triggers for auto-start logic
 
   // Cleanup stream on unmount
   useEffect(() => {
     return () => {
       console.log("FaceCapture: Component unmounting, ensuring camera is stopped.");
       stopCamera();
+      if (cameraOperationInProgress.current) { // Ensure flag is reset on unmount if operation was pending
+        cameraOperationInProgress.current = false;
+      }
     };
   }, [stopCamera]);
 
@@ -166,16 +179,18 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       if (context) {
+        // Mirror the captured image to match the preview
         context.translate(video.videoWidth, 0);
         context.scale(-1, 1);
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        context.setTransform(1, 0, 0, 1, 0, 0);
+        // Reset transformation for future drawings if any
+        context.setTransform(1, 0, 0, 1, 0, 0); 
       }
       const dataUrl = canvas.toDataURL('image/png');
       setImageDataUrl(dataUrl);
       console.log("FaceCapture: Face captured.");
       setIsTakingPicture(false);
-      // stopCamera(); // Optionally stop camera after capture, or leave for retake
+      // stopCamera(); // Keep camera active for retake by default
     } else if (!isCameraActive) {
         toast({ title: "Camera Off", description: "Please start the camera first.", variant: "destructive" });
     }
@@ -185,7 +200,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     if (imageDataUrl) {
       console.log("FaceCapture: Confirming photo.");
       onFaceCaptured(imageDataUrl);
-      stopCamera(); // Stop camera after confirming
+      stopCamera(); 
     }
   };
 
@@ -193,11 +208,13 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     console.log("FaceCapture: Retaking photo.");
     setImageDataUrl(null);
     setError(null);
-    if (!isCameraActiveRef.current && !isStartingCameraRef.current) { // Use refs here
+    if (!isCameraActiveRef.current && !cameraOperationInProgress.current) { 
       console.log("FaceCapture: Camera not active for retake, starting camera.");
       startCamera();
+    } else if (isCameraActiveRef.current) {
+      console.log("FaceCapture: Camera already active for retake.");
     } else {
-      console.log("FaceCapture: Camera already active or starting for retake.");
+      console.log("FaceCapture: Camera starting or operation in progress, retake will use existing process.");
     }
   };
   
@@ -212,7 +229,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       <div 
         className="relative rounded-lg overflow-hidden border-2 border-dashed border-primary bg-muted data-[capturing=true]:animate-pulse-border"
         style={previewStyle}
-        data-capturing={showVideoFeed}
+        data-capturing={showVideoFeed && !isTakingPicture}
       >
         <video
           ref={videoRef}
@@ -220,7 +237,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
           playsInline
           muted
           className={cn(
-            "object-cover w-full h-full transform scaleX-[-1]",
+            "object-cover w-full h-full transform scaleX-[-1]", // Mirror preview
             { 'hidden': !showVideoFeed }
           )}
           onCanPlay={() => console.log("FaceCapture: Video onCanPlay event fired.")}
@@ -231,7 +248,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
           <img src={imageDataUrl} alt="Captured face" className="object-cover w-full h-full absolute inset-0" />
         )}
         {showStartingCameraMessage && (
-             <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80">
+             <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 p-4 text-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="mt-2 text-sm text-foreground">Starting camera...</p>
             </div>
@@ -247,9 +264,9 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       <canvas ref={canvasRef} className="hidden"></canvas>
 
       {(showErrorMessage || showCameraOffMessage) && (
-         <Button onClick={startCamera} className="w-full" variant="outline" disabled={isStartingCamera}>
-          {isStartingCamera ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Camera size={18} className="mr-2" />}
-          {isStartingCamera ? "Starting..." : (error ? "Retry Camera" : "Start Camera")}
+         <Button onClick={startCamera} className="w-full" variant="outline" disabled={isStartingCamera || cameraOperationInProgress.current}>
+          {(isStartingCamera || cameraOperationInProgress.current) ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Camera size={18} className="mr-2" />}
+          {(isStartingCamera || cameraOperationInProgress.current) ? "Starting..." : (error ? "Retry Camera" : "Start Camera")}
         </Button>
       )}
       
@@ -262,7 +279,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
 
       {imageDataUrl && (
         <div className="flex gap-2 w-full">
-          <Button onClick={handleRetake} variant="outline" className="flex-1">
+          <Button onClick={handleRetake} variant="outline" className="flex-1" disabled={cameraOperationInProgress.current || isStartingCamera}>
             <RefreshCw size={18} className="mr-2" />
             Retake
           </Button>
@@ -277,4 +294,3 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
 };
 
 export default FaceCapture;
-
