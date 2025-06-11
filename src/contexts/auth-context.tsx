@@ -5,13 +5,13 @@ import type { User } from '@/types';
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import useLocalStorage from '@/hooks/use-local-storage';
 import { enhanceFaceImage, EnhanceFaceImageInput } from '@/ai/flows/enhance-face-image';
-import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
   user: User | null;
   users: User[];
   loading: boolean;
-  loginWithFace: (capturedFaceUri: string) => Promise<boolean>; // Email removed
+  loginWithFace: (capturedFaceUri: string) => Promise<boolean>;
   signup: (name: string, email: string, faceImageUri: string) => Promise<boolean>;
   logout: () => void;
   updateUserFaceAdmin: (userId: string, newFaceImageUri: string) => Promise<boolean>;
@@ -24,12 +24,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [users, setUsers] = useLocalStorage<User[]>('users', []);
   const [currentUser, setCurrentUser] = useLocalStorage<User | null>('currentUser', null);
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast(); // Initialize toast
+  const { toast } = useToast();
 
   useEffect(() => {
     setLoading(false);
   }, [currentUser]);
 
+  // Utility to call the AI enhancement flow. Does not show toasts itself.
   const enhanceAndSetFace = async (photoDataUri: string): Promise<string | null> => {
     try {
       const input: EnhanceFaceImageInput = { photoDataUri };
@@ -37,7 +38,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return result.enhancedPhotoDataUri;
     } catch (error) {
       console.error("Error enhancing face image:", error);
-      // Toasting here might be too early if called from signup, signup should handle its own UI feedback.
+      // Let the caller handle UI feedback (toast)
       return null;
     }
   };
@@ -46,30 +47,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(true);
 
     if (users.length === 0) {
-      // The form will handle "No users registered" toast.
-      // This context method should primarily focus on the logic.
+      toast({ title: "Login Failed", description: "No users are registered. Please sign up.", variant: "destructive" });
       setLoading(false);
       return false;
     }
 
-    // Simulate face recognition: For this prototype, if a face is captured
-    // and users exist, we "log in" the first registered user.
-    // This is a placeholder for a real face recognition system.
-    const userToLogin = users[0]; // Attempt to log in as the first user (usually admin).
+    // Attempt to enhance the captured face for "recognition"
+    // In a real system, this enhanced image would be sent to a face matching service.
+    const enhancedLoginFaceUri = await enhanceAndSetFace(capturedFaceUri);
 
-    if (userToLogin && capturedFaceUri) {
-      // Simulate a delay for "face processing"
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000)); // 1-2s delay
-      
-      setCurrentUser(userToLogin);
+    if (!enhancedLoginFaceUri) {
+      toast({ title: "Login Failed", description: "Could not process the captured face for recognition. Please ensure your face is clear and well-lit.", variant: "destructive" });
       setLoading(false);
-      return true;
+      return false;
     }
-    
-    // This path should ideally not be hit if users.length > 0 and capturedFaceUri is valid.
-    // If it is, it implies an unexpected issue or that capturedFaceUri became null somehow.
+
+    // If enhancement is successful, proceed with prototype login (first user)
+    // This simulates that a recognizable face was provided.
+    const userToLogin = users[0]; 
+
+    // Simulate a delay for "face processing"
+    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500)); 
+
+    setCurrentUser(userToLogin);
     setLoading(false);
-    return false;
+    return true;
   };
 
   const signup = async (name: string, email: string, faceImageUri: string): Promise<boolean> => {
@@ -83,7 +85,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const enhancedFaceImageUri = await enhanceAndSetFace(faceImageUri);
     if (!enhancedFaceImageUri) {
       setLoading(false);
-      toast({title: "Signup Failed", description: 'Failed to enhance face image. Please try again.', variant: "destructive"});
+      toast({title: "Signup Failed", description: 'Failed to enhance face image. Please try again with a clearer picture.', variant: "destructive"});
       return false;
     }
 
@@ -103,8 +105,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = () => {
     setCurrentUser(null);
-     // Optionally, redirect to login page after logout
-     // This is typically handled by components checking the user state.
   };
   
   const updateUserFaceAdmin = async (userId: string, newFaceImageUri: string): Promise<boolean> => {
@@ -119,25 +119,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const enhancedUri = await enhanceAndSetFace(newFaceImageUri);
     if (!enhancedUri) {
       setLoading(false);
-      toast({title: "Update Failed", description: 'Failed to enhance new face image.', variant: "destructive"});
+      toast({title: "Update Failed", description: 'Failed to enhance new face image. Please ensure the image is clear.', variant: "destructive"});
       return false;
     }
 
     const updatedUsers = [...users];
     updatedUsers[userIndex] = {
       ...updatedUsers[userIndex],
-      faceImageUri: newFaceImageUri, // Store original new capture
-      enhancedFaceImageUri: enhancedUri, // Store new enhanced image
+      faceImageUri: newFaceImageUri, 
+      enhancedFaceImageUri: enhancedUri, 
     };
     setUsers(updatedUsers);
     
-    // If the updated user is the current user, update currentUser as well
     if (currentUser?.id === userId) {
       setCurrentUser(updatedUsers[userIndex]);
     }
 
     setLoading(false);
-    // Toast for success is handled in UserManagementTable
+    // Success toast is handled in UserManagementTable for this specific admin action
     return true;
   };
 
