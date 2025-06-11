@@ -35,11 +35,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { toast } = useToast();
 
   useEffect(() => {
+    // Este efecto se ejecuta una vez al montar el componente para borrar los usuarios existentes.
+    // Esto es para cumplir con la solicitud de "borra los usuarios actuales".
+    // Esto restablecerá los datos de usuario almacenados en localStorage.
+    console.log("Borrando datos de usuario existentes de localStorage según lo solicitado.");
+    setAllUsers([]);
+    setStoredCurrentUser(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Se ejecuta solo una vez al montar
+
+
+  useEffect(() => {
     setLoading(true);
     if (storedCurrentUser && allUsers.length > 0) {
       const fullUser = allUsers.find(u => u.id === storedCurrentUser.id);
       setActiveUser(fullUser || null);
     } else {
+      // Si no hay storedCurrentUser o allUsers está vacío (quizás debido al efecto de limpieza de arriba),
+      // asegurarse de que activeUser sea null.
       setActiveUser(null);
     }
     setLoading(false);
@@ -51,8 +64,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const result = await enhanceFaceImage(input);
       return result.enhancedPhotoDataUri;
     } catch (error) {
-      console.error("Error enhancing face image:", error);
-      // Toast messages will be handled by the calling function based on context
+      console.error("Error al mejorar la imagen facial:", error);
+      // Los mensajes Toast serán manejados por la función que llama, según el contexto
       return null;
     }
   };
@@ -98,10 +111,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (bestMatch && bestMatch.label !== 'unknown') {
       const matchedUser = allUsers.find(u => u.id === bestMatch.label);
       if (matchedUser) {
-        // Create a light version for localStorage
         const userToStore: StoredCurrentUser = { id: matchedUser.id };
         setStoredCurrentUser(userToStore);
-        setActiveUser(matchedUser); // Set activeUser to the full user object for the app state
+        setActiveUser(matchedUser); 
         setLoading(false);
         return true;
       } else {
@@ -117,6 +129,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signup = async (name: string, email: string, faceImageUri: string, faceDescriptor: number[] | null): Promise<boolean> => {
     setLoading(true);
+    // Validar si el usuario ya existe con el mismo email en la lista `allUsers` actual
+    // que se obtiene de useLocalStorage y es la fuente de verdad.
     if (allUsers.find(u => u.email === email)) {
       setLoading(false);
       toast({title: "Registro Fallido", description: "Ya existe un usuario con este correo electrónico.", variant: "destructive"});
@@ -135,6 +149,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       toast({title: "Registro Fallido", description: 'Falló la mejora de la imagen facial. Intenta de nuevo con una imagen más clara.', variant: "destructive"});
       return false;
     }
+    
+    // Determinar si este es el primer usuario para hacerlo admin
+    const isAdmin = allUsers.length === 0;
 
     const newUser: User = {
       id: Date.now().toString(),
@@ -143,7 +160,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       faceImageUri,
       enhancedFaceImageUri,
       faceDescriptor,
-      isAdmin: allUsers.length === 0, 
+      isAdmin: isAdmin, 
     };
     setAllUsers([...allUsers, newUser]);
     
@@ -193,8 +210,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     if (activeUser?.id === userId) {
       setActiveUser(updatedUserFull);
-      // StoredCurrentUser is already just {id}, so no change needed if ID doesn't change
-      // If we stored more fields, we would update setStoredCurrentUser here.
     }
 
     setLoading(false);
@@ -216,3 +231,4 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+
