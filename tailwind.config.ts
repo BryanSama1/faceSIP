@@ -1,3 +1,4 @@
+
 import type {Config} from 'tailwindcss';
 
 export default {
@@ -89,8 +90,8 @@ export default {
           },
         },
         'pulse-border': {
-          '0%, 100%': { borderColor: 'hsl(var(--accent))' },
-          '50%': { borderColor: 'hsl(var(--primary))' },
+          '0%, 100%': { borderColor: 'hsl(var(--primary))' }, /* Adjusted to use primary consistently */
+          '50%': { borderColor: 'hsl(var(--accent))' },
         }
       },
       animation: {

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
@@ -23,17 +24,18 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const { toast } = useToast();
+  const autoStartAttemptedRef = useRef(false);
 
   const startCamera = useCallback(async () => {
     setError(null);
-    setImageDataUrl(null);
+    setImageDataUrl(null); // Reset image if we are restarting camera
     setIsCapturing(true);
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: imageSize, height: imageSize } });
-        setStream(stream);
+        const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: imageSize, height: imageSize } });
+        setStream(mediaStream);
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+          videoRef.current.srcObject = mediaStream;
         }
       } else {
         setError("Camera access not supported by your browser.");
@@ -67,16 +69,19 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   }, [stream]);
 
   useEffect(() => {
-    // Start camera automatically when component mounts
-    // startCamera();
+    if (!autoStartAttemptedRef.current && !stream && !imageDataUrl) {
+      startCamera();
+      autoStartAttemptedRef.current = true;
+    }
+
     // Cleanup: stop camera when component unmounts
     return () => {
       stopCamera();
     };
-  }, [stopCamera]); // Removed startCamera from dependencies to avoid re-triggering on every render
+  }, [startCamera, stopCamera, stream, imageDataUrl]); 
 
   const captureFace = () => {
-    if (videoRef.current && canvasRef.current) {
+    if (videoRef.current && canvasRef.current && stream) {
       setIsCapturing(true);
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -84,15 +89,15 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       if (context) {
-        // Flip the image horizontally for a mirror effect if desired
-        // context.translate(video.videoWidth, 0);
-        // context.scale(-1, 1);
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
         const dataUrl = canvas.toDataURL('image/png');
         setImageDataUrl(dataUrl);
-        // stopCamera(); // Stop camera after capture
+        // Consider stopping camera here or let user confirm first
+        // stopCamera(); 
       }
       setIsCapturing(false);
+    } else if (!stream) {
+        toast({ title: "Camera Off", description: "Please start the camera first.", variant: "destructive" });
     }
   };
 
@@ -105,8 +110,12 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
 
   const handleRetake = () => {
     setImageDataUrl(null);
-    if (!stream) { // If stream was stopped, restart it
+    if (!stream) { 
+      autoStartAttemptedRef.current = false; // Allow auto-start to try again if camera was off
       startCamera();
+    } else {
+      // If stream exists, just clear the image, camera is already running
+      setError(null); // Clear any previous errors
     }
   };
 
@@ -115,8 +124,9 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-md">
       <div 
-        className="relative rounded-lg overflow-hidden border-2 border-dashed border-primary animate-pulse-border bg-muted"
+        className="relative rounded-lg overflow-hidden border-2 border-dashed border-primary bg-muted data-[capturing=true]:animate-pulse-border"
         style={previewStyle}
+        data-capturing={!!stream && !imageDataUrl}
       >
         {imageDataUrl ? (
           <img src={imageDataUrl} alt="Captured face" className="object-cover w-full h-full" />
