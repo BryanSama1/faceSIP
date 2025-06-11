@@ -8,6 +8,9 @@ import { enhanceFaceImage, EnhanceFaceImageInput } from '@/ai/flows/enhance-face
 import { useToast } from '@/hooks/use-toast';
 import * as faceapi from 'face-api.js';
 
+// Type for the minimal data stored in localStorage for the current user
+type StoredCurrentUser = { id: string } | null;
+
 interface AuthContextType {
   user: User | null;
   users: User[];
@@ -24,14 +27,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const FACE_MATCH_THRESHOLD = 0.55; 
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useLocalStorage<User[]>('users', []);
-  const [currentUser, setCurrentUser] = useLocalStorage<User | null>('currentUser', null);
+  const [allUsers, setAllUsers] = useLocalStorage<User[]>('users', []);
+  const [storedCurrentUser, setStoredCurrentUser] = useLocalStorage<StoredCurrentUser>('currentUser', null);
+  
+  const [activeUser, setActiveUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
+    setLoading(true);
+    if (storedCurrentUser && allUsers.length > 0) {
+      const fullUser = allUsers.find(u => u.id === storedCurrentUser.id);
+      setActiveUser(fullUser || null);
+    } else {
+      setActiveUser(null);
+    }
     setLoading(false);
-  }, [currentUser]);
+  }, [storedCurrentUser, allUsers]);
 
   const enhanceAndSetFace = async (photoDataUri: string): Promise<string | null> => {
     try {
@@ -40,6 +52,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return result.enhancedPhotoDataUri;
     } catch (error) {
       console.error("Error enhancing face image:", error);
+      // Toast messages will be handled by the calling function based on context
       return null;
     }
   };
@@ -47,7 +60,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const loginWithFace = async (capturedFaceUri: string, capturedFaceDescriptor: number[] | null): Promise<boolean> => {
     setLoading(true);
 
-    if (users.length === 0) {
+    if (allUsers.length === 0) {
       toast({ title: "Inicio de Sesión Fallido", description: "No hay usuarios registrados. Por favor, regístrate.", variant: "destructive" });
       setLoading(false);
       return false;
@@ -66,8 +79,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return false;
     }
 
-
-    const labeledFaceDescriptors = users
+    const labeledFaceDescriptors = allUsers
       .filter(user => user.faceDescriptor && user.faceDescriptor.length > 0)
       .map(user => new faceapi.LabeledFaceDescriptors(
         user.id, 
@@ -84,9 +96,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const bestMatch = faceMatcher.findBestMatch(new Float32Array(capturedFaceDescriptor));
 
     if (bestMatch && bestMatch.label !== 'unknown') {
-      const matchedUser = users.find(u => u.id === bestMatch.label);
+      const matchedUser = allUsers.find(u => u.id === bestMatch.label);
       if (matchedUser) {
-        setCurrentUser(matchedUser);
+        // Create a light version for localStorage
+        const userToStore: StoredCurrentUser = { id: matchedUser.id };
+        setStoredCurrentUser(userToStore);
+        setActiveUser(matchedUser); // Set activeUser to the full user object for the app state
         setLoading(false);
         return true;
       } else {
@@ -102,7 +117,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signup = async (name: string, email: string, faceImageUri: string, faceDescriptor: number[] | null): Promise<boolean> => {
     setLoading(true);
-    if (users.find(u => u.email === email)) {
+    if (allUsers.find(u => u.email === email)) {
       setLoading(false);
       toast({title: "Registro Fallido", description: "Ya existe un usuario con este correo electrónico.", variant: "destructive"});
       return false;
@@ -128,21 +143,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       faceImageUri,
       enhancedFaceImageUri,
       faceDescriptor,
-      isAdmin: users.length === 0, 
+      isAdmin: allUsers.length === 0, 
     };
-    setUsers([...users, newUser]);
-    setCurrentUser(newUser); 
+    setAllUsers([...allUsers, newUser]);
+    
+    const userToStore: StoredCurrentUser = { id: newUser.id };
+    setStoredCurrentUser(userToStore);
+    setActiveUser(newUser);
     setLoading(false);
     return true;
   };
 
   const logout = () => {
-    setCurrentUser(null);
+    setStoredCurrentUser(null);
+    setActiveUser(null);
   };
   
   const updateUserFaceAdmin = async (userId: string, newFaceImageUri: string, newFaceDescriptor: number[] | null): Promise<boolean> => {
     setLoading(true);
-    const userIndex = users.findIndex(u => u.id === userId);
+    const userIndex = allUsers.findIndex(u => u.id === userId);
     if (userIndex === -1) {
       setLoading(false);
       toast({title: "Actualización Fallida", description: "Usuario no encontrado.", variant: "destructive"});
@@ -162,17 +181,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return false;
     }
 
-    const updatedUsers = [...users];
-    updatedUsers[userIndex] = {
-      ...updatedUsers[userIndex],
+    const updatedUsersArray = [...allUsers];
+    const updatedUserFull = {
+      ...updatedUsersArray[userIndex],
       faceImageUri: newFaceImageUri, 
       enhancedFaceImageUri: enhancedUri, 
       faceDescriptor: newFaceDescriptor,
     };
-    setUsers(updatedUsers);
+    updatedUsersArray[userIndex] = updatedUserFull;
+    setAllUsers(updatedUsersArray);
     
-    if (currentUser?.id === userId) {
-      setCurrentUser(updatedUsers[userIndex]);
+    if (activeUser?.id === userId) {
+      setActiveUser(updatedUserFull);
+      // StoredCurrentUser is already just {id}, so no change needed if ID doesn't change
+      // If we stored more fields, we would update setStoredCurrentUser here.
     }
 
     setLoading(false);
@@ -181,7 +203,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 
   return (
-    <AuthContext.Provider value={{ user: currentUser, users, loading, loginWithFace, signup, logout, updateUserFaceAdmin, enhanceAndSetFace }}>
+    <AuthContext.Provider value={{ user: activeUser, users: allUsers, loading, loginWithFace, signup, logout, updateUserFaceAdmin, enhanceAndSetFace }}>
       {children}
     </AuthContext.Provider>
   );
