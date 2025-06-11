@@ -11,10 +11,10 @@ interface AuthContextType {
   user: User | null;
   users: User[];
   loading: boolean;
-  loginWithFace: (capturedFaceUri: string) => Promise<boolean>;
-  signup: (name: string, email: string, faceImageUri: string) => Promise<boolean>;
+  loginWithFace: (capturedFaceUri: string) => Promise<boolean>; // This will change later for live recognition
+  signup: (name: string, email: string, faceImageUri: string, faceDescriptor: number[] | null) => Promise<boolean>;
   logout: () => void;
-  updateUserFaceAdmin: (userId: string, newFaceImageUri: string) => Promise<boolean>;
+  updateUserFaceAdmin: (userId: string, newFaceImageUri: string, newFaceDescriptor: number[] | null) => Promise<boolean>;
   enhanceAndSetFace: (photoDataUri: string) => Promise<string | null>;
 }
 
@@ -30,7 +30,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(false);
   }, [currentUser]);
 
-  // Utility to call the AI enhancement flow. Does not show toasts itself.
   const enhanceAndSetFace = async (photoDataUri: string): Promise<string | null> => {
     try {
       const input: EnhanceFaceImageInput = { photoDataUri };
@@ -38,7 +37,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return result.enhancedPhotoDataUri;
     } catch (error) {
       console.error("Error enhancing face image:", error);
-      // Let the caller handle UI feedback (toast)
       return null;
     }
   };
@@ -51,9 +49,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setLoading(false);
       return false;
     }
-
-    // Attempt to enhance the captured face for "recognition"
-    // In a real system, this enhanced image would be sent to a face matching service.
+    
     const enhancedLoginFaceUri = await enhanceAndSetFace(capturedFaceUri);
 
     if (!enhancedLoginFaceUri) {
@@ -61,12 +57,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setLoading(false);
       return false;
     }
-
-    // If enhancement is successful, proceed with prototype login (first user)
-    // This simulates that a recognizable face was provided.
+    
+    // SIMULATED LOGIN: For now, logs in the first user if face processing is successful.
+    // This will be replaced with actual descriptor comparison later.
     const userToLogin = users[0]; 
 
-    // Simulate a delay for "face processing"
     await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500)); 
 
     setCurrentUser(userToLogin);
@@ -74,12 +69,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return true;
   };
 
-  const signup = async (name: string, email: string, faceImageUri: string): Promise<boolean> => {
+  const signup = async (name: string, email: string, faceImageUri: string, faceDescriptor: number[] | null): Promise<boolean> => {
     setLoading(true);
     if (users.find(u => u.email === email)) {
       setLoading(false);
       toast({title: "Signup Failed", description: "User with this email already exists.", variant: "destructive"});
       return false;
+    }
+
+    if (!faceDescriptor) {
+        setLoading(false);
+        toast({title: "Signup Failed", description: 'Could not compute facial descriptor. Please try capturing your face again.', variant: "destructive"});
+        return false;
     }
 
     const enhancedFaceImageUri = await enhanceAndSetFace(faceImageUri);
@@ -95,10 +96,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       email,
       faceImageUri,
       enhancedFaceImageUri,
+      faceDescriptor,
       isAdmin: users.length === 0, // First user is admin
     };
     setUsers([...users, newUser]);
-    setCurrentUser(newUser); // Auto-login after signup
+    setCurrentUser(newUser); 
     setLoading(false);
     return true;
   };
@@ -107,13 +109,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setCurrentUser(null);
   };
   
-  const updateUserFaceAdmin = async (userId: string, newFaceImageUri: string): Promise<boolean> => {
+  const updateUserFaceAdmin = async (userId: string, newFaceImageUri: string, newFaceDescriptor: number[] | null): Promise<boolean> => {
     setLoading(true);
     const userIndex = users.findIndex(u => u.id === userId);
     if (userIndex === -1) {
       setLoading(false);
       toast({title: "Update Failed", description: "User not found.", variant: "destructive"});
       return false;
+    }
+
+    if (!newFaceDescriptor) {
+        setLoading(false);
+        toast({title: "Update Failed", description: 'Could not compute new facial descriptor. Please try capturing again.', variant: "destructive"});
+        return false;
     }
 
     const enhancedUri = await enhanceAndSetFace(newFaceImageUri);
@@ -128,6 +136,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ...updatedUsers[userIndex],
       faceImageUri: newFaceImageUri, 
       enhancedFaceImageUri: enhancedUri, 
+      faceDescriptor: newFaceDescriptor,
     };
     setUsers(updatedUsers);
     
@@ -136,7 +145,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     setLoading(false);
-    // Success toast is handled in UserManagementTable for this specific admin action
     return true;
   };
 

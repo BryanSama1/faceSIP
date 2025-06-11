@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -15,14 +16,20 @@ export default function SignupForm() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [capturedFaceUri, setCapturedFaceUri] = useState<string | null>(null);
+  const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
   const [isSigningUp, setIsSigningUp] = useState(false);
-  const { signup, enhanceAndSetFace } = useAuth(); // ensure enhanceAndSetFace is exported and available
+  const { signup } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleFaceCaptured = (dataUrl: string) => {
+  const handleFaceCaptured = (dataUrl: string, descriptor: number[] | null) => {
     setCapturedFaceUri(dataUrl);
-    toast({ title: "Face Captured", description: "Your face image has been captured." });
+    setFaceDescriptor(descriptor);
+    if (descriptor) {
+      toast({ title: "Face Captured", description: "Your face image and descriptor have been processed." });
+    } else {
+      toast({ title: "Face Captured (No Descriptor)", description: "Face image captured, but descriptor could not be computed. Try again with a clearer image for better recognition.", variant: "default", duration: 7000 });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,21 +42,20 @@ export default function SignupForm() {
       toast({ title: "Face Capture Required", description: "Please capture your face for registration.", variant: "destructive" });
       return;
     }
+    if (!faceDescriptor) {
+      toast({ title: "Descriptor Missing", description: "Facial descriptor not available. Please recapture your face clearly.", variant: "destructive" });
+      return;
+    }
 
     setIsSigningUp(true);
     try {
-      // The signup function in AuthContext now handles enhancement.
-      const success = await signup(name, email, capturedFaceUri);
+      const success = await signup(name, email, capturedFaceUri, faceDescriptor);
 
       if (success) {
         toast({ title: "Signup Successful", description: "Your account has been created. Welcome!" });
         router.push('/dashboard');
       } else {
-        // Specific error for signup failure handled by signup function (e.g. user exists)
-        // or generic error if enhanceAndSetFace failed within signup.
-        // Toast for specific errors like "user exists" should be handled within the signup auth context method
-        // or return more specific error codes/messages.
-        // For now, a general message if it's not "user exists" (which auth context might alert).
+        // Signup failure toasts are handled within the auth context's signup method
       }
     } catch (error) {
       console.error("Signup error:", error);
@@ -91,11 +97,12 @@ export default function SignupForm() {
         <p className="text-sm text-muted-foreground">
           This image will be used for logging in. Ensure good lighting and a clear view of your face.
         </p>
-        <FaceCapture onFaceCaptured={handleFaceCaptured} captureButtonText="Capture Face for Registration" />
-        {capturedFaceUri && <p className="text-xs text-green-600 text-center">Face captured. Ready for enhancement upon signup.</p>}
+        <FaceCapture onFaceCaptured={handleFaceCaptured} captureButtonText="Capture Face & Get Descriptor" />
+        {capturedFaceUri && faceDescriptor && <p className="text-xs text-green-600 text-center">Face and descriptor captured successfully!</p>}
+        {capturedFaceUri && !faceDescriptor && <p className="text-xs text-amber-600 text-center">Face captured, but descriptor failed. Try retaking.</p>}
       </div>
 
-      <Button type="submit" disabled={isSigningUp || !capturedFaceUri} className="w-full">
+      <Button type="submit" disabled={isSigningUp || !capturedFaceUri || !faceDescriptor} className="w-full">
         {isSigningUp ? (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         ) : (

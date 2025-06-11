@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import * as faceapi from 'face-api.js';
 
 interface FaceCaptureProps {
-  onFaceCaptured: (dataUrl: string) => void;
+  onFaceCaptured: (dataUrl: string, descriptor: number[] | null) => void;
   captureButtonText?: string;
   imageSize?: number;
 }
@@ -29,8 +29,9 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [descriptorModelsLoaded, setDescriptorModelsLoaded] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState<string>("Initializing...");
-  const [isFaceDetected, setIsFaceDetected] = useState(false);
+  const [isFaceDetectedInPreview, setIsFaceDetectedInPreview] = useState(false);
 
 
   const { toast } = useToast();
@@ -53,22 +54,29 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     setDetectionStatus("Loading face detection models...");
     console.log(`FaceCapture: Attempting to load models from base URL: ${MODEL_URL}`);
     try {
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-      ]);
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
       setModelsLoaded(true);
-      setDetectionStatus("Models loaded. Ready for face detection.");
-      console.log("FaceCapture: Models loaded successfully.");
+      setDetectionStatus("Detector models loaded. Loading recognition models...");
+      console.log("FaceCapture: TinyFaceDetector models loaded successfully.");
+
+      await Promise.all([
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ]);
+      setDescriptorModelsLoaded(true);
+      setDetectionStatus("All models loaded. Ready for face detection and recognition.");
+      console.log("FaceCapture: Landmark and Recognition models loaded successfully.");
+
     } catch (e) {
       console.error("FaceCapture: Error loading models: ", e);
-      const errorMsg = `Failed to load face detection models from ${MODEL_URL}/tiny_face_detector_model-weights_manifest.json (or related files). Real-time face outlines will NOT work. Please ensure model files are in 'public/models/'. Check browser Network tab for 404 errors.`;
+      const errorMsg = `Failed to load face detection/recognition models. Manifest files like 'tiny_face_detector_model-weights_manifest.json', 'face_landmark_68_model-weights_manifest.json', or 'face_recognition_model-weights_manifest.json' (and their shards) might be missing from '${MODEL_URL}/'. Real-time face outlines and descriptor extraction will NOT work. Please ensure model files are in 'public/models/'. Check browser Network tab for 404 errors.`;
       setError(errorMsg);
-      setDetectionStatus("Error: Models not found. Check `public/models/` and Network tab for 404s on 'tiny_face_detector_model-weights_manifest.json'.");
+      setDetectionStatus(`Error: Models not found. Check 'public/models/' and Network tab for 404s on model manifest files. Details in console.`);
       toast({
-        title: "Face Detection Model Error (404)",
-        description: `Could not load 'tiny_face_detector_model-weights_manifest.json' from ${MODEL_URL}/. Ensure it and related shard files are in your project's 'public/models/' directory. Check browser's Network tab for details. Real-time face outlines are unavailable.`,
+        title: "Face Model Error (404 Likely)",
+        description: `Could not load all required face-api.js models from ${MODEL_URL}/. Ensure 'tiny_face_detector_model', 'face_landmark_68_model', and 'face_recognition_model' (manifests & shards) are in your project's 'public/models/' directory. Check browser's Network tab for details. Face processing features will be limited.`,
         variant: "destructive",
-        duration: 15000
+        duration: 20000
       });
     }
   }, [toast]);
@@ -92,8 +100,8 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       console.log("FaceCapture: Media stream tracks stopped.");
     }
     setStream(null);
-    setIsCameraActive(false); 
-    setIsFaceDetected(false);
+    setIsCameraActive(false);
+    setIsFaceDetectedInPreview(false);
   }, []);
 
   const startDetection = useCallback(() => {
@@ -116,12 +124,12 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     detectionIntervalRef.current = setInterval(async () => {
       if (video.paused || video.ended || !isCameraActiveRef.current) {
         if(detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
-        setIsFaceDetected(false);
+        setIsFaceDetectedInPreview(false);
         return;
       }
 
       const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }));
-      setIsFaceDetected(detections.length > 0);
+      setIsFaceDetectedInPreview(detections.length > 0);
 
       const resizedDetections = faceapi.resizeResults(detections, displaySize);
       const context = canvas.getContext('2d');
@@ -146,10 +154,10 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
 
     cameraOperationInProgress.current = true;
     setError(null);
-    setImageDataUrl(null); 
+    setImageDataUrl(null);
     setIsStartingCamera(true);
-    setIsCameraActive(false); 
-    setIsFaceDetected(false);
+    setIsCameraActive(false);
+    setIsFaceDetectedInPreview(false);
     console.log("FaceCapture: Set isStartingCamera to true.");
 
     try {
@@ -180,10 +188,14 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
   }, [imageSize, toast]);
 
   useEffect(() => {
+    // This effect should run once on mount if no image is present and camera isn't active/starting.
     if (!imageDataUrl && !isCameraActiveRef.current && !streamRef.current && !cameraOperationInProgress.current && !error) {
       console.log("FaceCapture: Auto-starting camera via useEffect.");
       startCamera();
     }
+  // The dependency array is intentionally simple to control auto-start behavior.
+  // Adding more reactive values here could cause unintended restarts.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageDataUrl, error, startCamera]);
 
 
@@ -199,7 +211,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
             console.log("FaceCapture: Video playback started successfully.");
             setIsCameraActive(true);
             setIsStartingCamera(false);
-            setError(null); 
+            setError(null);
             cameraOperationInProgress.current = false;
             if (modelsLoaded) startDetection();
           })
@@ -213,7 +225,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
             }
             setError(message); toast({ title: "Camera Playback Error", description: message, variant: "destructive" });
             setIsCameraActive(false); setIsStartingCamera(false); cameraOperationInProgress.current = false;
-            stopCamera(); 
+            stopCamera();
           });
       };
       videoNode.onerror = (e) => {
@@ -237,41 +249,70 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
     };
   }, [stopCamera]);
 
-  const captureFace = () => {
-    if (videoRef.current && canvasRef.current && stream && isCameraActive && isFaceDetected) {
+  const captureFace = async () => {
+    if (videoRef.current && canvasRef.current && stream && isCameraActive && isFaceDetectedInPreview) {
       setIsTakingPicture(true);
       const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext('2d');
+      const captureCanvas = canvasRef.current;
+      captureCanvas.width = video.videoWidth;
+      captureCanvas.height = video.videoHeight;
+      const context = captureCanvas.getContext('2d');
       if (context) {
         context.translate(video.videoWidth, 0);
-        context.scale(-1, 1);
+        context.scale(-1, 1); // Mirror the snapshot
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
       }
-      const dataUrl = canvas.toDataURL('image/png');
+      const dataUrl = captureCanvas.toDataURL('image/png');
       setImageDataUrl(dataUrl);
+
+      // Now compute descriptor
+      let descriptor: number[] | null = null;
+      if (descriptorModelsLoaded) {
+        try {
+          // Need to use an HTMLImageElement for face-api.js processing from dataUrl
+          const img = document.createElement('img');
+          img.src = dataUrl;
+          await new Promise((resolve, reject) => { // Wait for image to load
+            img.onload = resolve;
+            img.onerror = reject;
+          });
+
+          const detectionResult = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+                                              .withFaceLandmarks()
+                                              .withFaceDescriptor();
+          if (detectionResult) {
+            descriptor = Array.from(detectionResult.descriptor); // Convert Float32Array to number[]
+            console.log("FaceCapture: Descriptor computed successfully.");
+          } else {
+            console.warn("FaceCapture: Could not compute descriptor, face not detected in captured image.");
+            toast({title: "Descriptor Warning", description: "Could not compute face descriptor from the captured image. Try a clearer shot.", variant: "default", duration: 5000});
+          }
+        } catch (descError) {
+          console.error("FaceCapture: Error computing descriptor:", descError);
+          toast({title: "Descriptor Error", description: "Failed to compute face descriptor.", variant: "destructive"});
+        }
+      } else {
+        console.warn("FaceCapture: Descriptor models not loaded, cannot compute descriptor.");
+        toast({title: "Models Missing", description: "Recognition models not loaded. Descriptor cannot be computed.", variant: "destructive"});
+      }
+      
       setIsTakingPicture(false);
+      onFaceCaptured(dataUrl, descriptor); // Pass descriptor (or null) to parent
+      stopCamera(); // Stop camera after capture and descriptor computation
+      
     } else if (!isCameraActive) {
         toast({ title: "Camera Off", description: "Please start the camera first.", variant: "destructive" });
-    } else if (!isFaceDetected) {
+    } else if (!isFaceDetectedInPreview) {
         toast({ title: "No Face Detected", description: "Please ensure your face is clearly visible in the frame.", variant: "destructive" });
     }
   };
 
-  const handleConfirm = () => {
-    if (imageDataUrl) {
-      onFaceCaptured(imageDataUrl);
-      stopCamera(); 
-    }
-  };
 
   const handleRetake = () => {
     setImageDataUrl(null);
-    setError(null); 
-    setIsFaceDetected(false);
+    setError(null);
+    setIsFaceDetectedInPreview(false);
 
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
@@ -282,7 +323,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       startCamera();
     } else if (isCameraActiveRef.current && modelsLoaded) {
       console.log("FaceCapture: Retake - camera active, restarting detection.");
-      startDetection(); 
+      startDetection();
     } else if (isCameraActiveRef.current && !modelsLoaded) {
         console.log("FaceCapture: Retake - camera active, models not loaded. Detection will not restart.");
     }
@@ -298,15 +339,14 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
           <p className="mt-2 text-sm text-foreground">Starting camera...</p>
       </div>
     );
-  } else if (!modelsLoaded && detectionStatus.startsWith("Error:")) {
+  } else if ((!modelsLoaded || !descriptorModelsLoaded) && detectionStatus.startsWith("Error:")) {
     previewMessageArea = (
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-destructive/10 p-4 text-center">
         <AlertTriangle size={imageSize / 5} className="mb-2 text-destructive" />
-        <p className="text-sm font-semibold text-destructive">Face Detection Models Failed to Load</p>
+        <p className="text-sm font-semibold text-destructive">Face Models Failed to Load</p>
         <p className="text-xs text-destructive/80 mt-1">{detectionStatus}</p>
         <p className="text-xs text-muted-foreground mt-2">
-          Verify `tiny_face_detector_model-weights_manifest.json` (and shards) are in `public/models/`.
-          Check browser Network tab for 404 errors.
+          Verify model files are in `public/models/`. Check browser Network tab for 404 errors.
         </p>
       </div>
     );
@@ -315,7 +355,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground absolute inset-0 p-4 text-center">
         <VideoOff size={imageSize / 4} className="mb-2" />
         <p className="text-sm text-destructive">{error}</p>
-        {!modelsLoaded && detectionStatus && !detectionStatus.startsWith("Error:") && <p className="text-xs text-muted-foreground mt-1">{detectionStatus}</p>}
+        {(!modelsLoaded || !descriptorModelsLoaded) && detectionStatus && !detectionStatus.startsWith("Error:") && <p className="text-xs text-muted-foreground mt-1">{detectionStatus}</p>}
       </div>
     );
   } else if (!isCameraActive && !imageDataUrl && !isStartingCamera) {
@@ -323,7 +363,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground absolute inset-0 p-4 text-center">
         <VideoOff size={imageSize / 4} className="mb-2" />
         <p className="text-sm">Camera is off or unavailable.</p>
-        {!modelsLoaded && detectionStatus && !detectionStatus.startsWith("Error:") &&  <p className="text-xs text-muted-foreground mt-1">{detectionStatus}</p>}
+        {(!modelsLoaded || !descriptorModelsLoaded) && detectionStatus && !detectionStatus.startsWith("Error:") &&  <p className="text-xs text-muted-foreground mt-1">{detectionStatus}</p>}
       </div>
     );
   }
@@ -331,12 +371,14 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
 
   const showVideoFeed = isCameraActive && !imageDataUrl;
   let captureButtonDynamicText = captureButtonText;
-  if (showVideoFeed && modelsLoaded && !isFaceDetected) {
-    captureButtonDynamicText = "Position Face in Frame";
-  } else if (showVideoFeed && !modelsLoaded && !detectionStatus.startsWith("Error:")) {
+  const allModelsFullyLoaded = modelsLoaded && descriptorModelsLoaded;
+
+  if (showVideoFeed && !allModelsFullyLoaded && !detectionStatus.startsWith("Error:")) {
     captureButtonDynamicText = "Models Loading...";
-  } else if (showVideoFeed && !modelsLoaded && detectionStatus.startsWith("Error:")) {
+  } else if (showVideoFeed && !allModelsFullyLoaded && detectionStatus.startsWith("Error:")){
     captureButtonDynamicText = "Detector Models Missing";
+  } else if (showVideoFeed && allModelsFullyLoaded && !isFaceDetectedInPreview) {
+    captureButtonDynamicText = "Position Face in Frame";
   }
 
 
@@ -345,7 +387,7 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       <div
         className="relative rounded-lg overflow-hidden border-2 border-dashed border-primary bg-muted data-[capturing=true]:animate-pulse-border"
         style={previewStyle}
-        data-capturing={showVideoFeed && !isTakingPicture && modelsLoaded && isFaceDetected}
+        data-capturing={showVideoFeed && !isTakingPicture && allModelsFullyLoaded && isFaceDetectedInPreview}
       >
         <video
           ref={videoRef}
@@ -353,12 +395,12 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
           playsInline
           muted
           className={cn(
-            "object-cover w-full h-full transform scaleX-[-1]", 
+            "object-cover w-full h-full transform scaleX-[-1]",
             { 'hidden': !showVideoFeed }
           )}
-          onPlay={() => { 
+          onPlay={() => {
             console.log("FaceCapture: Video onPlay event triggered.");
-            if (modelsLoaded && isCameraActiveRef.current && !detectionIntervalRef.current) {
+            if (modelsLoaded && isCameraActiveRef.current && !detectionIntervalRef.current) { // only detector models needed for preview
               startDetection();
             }
           }}
@@ -366,8 +408,8 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
         <canvas
             ref={detectionCanvasRef}
             className={cn(
-              "absolute top-0 left-0 w-full h-full object-cover transform scaleX-[-1]", 
-              { 'hidden': !modelsLoaded || !showVideoFeed } 
+              "absolute top-0 left-0 w-full h-full object-cover transform scaleX-[-1]",
+              { 'hidden': !modelsLoaded || !showVideoFeed } // only detector models needed for preview
             )}
             style={previewStyle}
         />
@@ -377,19 +419,19 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
 
         {previewMessageArea}
 
-        {showVideoFeed && !modelsLoaded && detectionStatus && !detectionStatus.startsWith("Error:") && (
+        {showVideoFeed && (!allModelsFullyLoaded) && detectionStatus && !detectionStatus.startsWith("Error:") && (
             <div className="absolute bottom-2 left-2 right-2 bg-black/50 text-white text-xs p-1 rounded text-center">
                 <Loader2 className="inline-block h-3 w-3 mr-1 animate-spin" />
                 {detectionStatus}
             </div>
         )}
-         {showVideoFeed && modelsLoaded && !isFaceDetected && !isStartingCamera && (
+         {showVideoFeed && allModelsFullyLoaded && !isFaceDetectedInPreview && !isStartingCamera && (
           <div className="absolute bottom-2 left-2 right-2 bg-amber-500/80 text-white text-xs p-1 rounded text-center font-medium">
             Position your face in the frame.
           </div>
         )}
       </div>
-      <canvas ref={canvasRef} className="hidden"></canvas>
+      <canvas ref={canvasRef} className="hidden"></canvas> {/* For capturing image and descriptor processing */}
 
 
       {(!isCameraActive && !showVideoFeed && !imageDataUrl) && (
@@ -400,21 +442,20 @@ const FaceCapture: React.FC<FaceCaptureProps> = ({
       )}
 
       {showVideoFeed && (
-        <Button onClick={captureFace} disabled={isTakingPicture || !modelsLoaded || !isFaceDetected} className="w-full bg-accent hover:bg-accent/90">
+        <Button onClick={captureFace} disabled={isTakingPicture || !allModelsFullyLoaded || !isFaceDetectedInPreview} className="w-full bg-accent hover:bg-accent/90">
           {isTakingPicture ? <Loader2 size={18} className="mr-2 animate-spin" /> : <ScanFace size={18} className="mr-2" />}
-          {isTakingPicture ? 'Capturing...' : captureButtonDynamicText}
+          {isTakingPicture ? 'Processing...' : captureButtonDynamicText}
         </Button>
       )}
 
       {imageDataUrl && (
+        // No confirm button here, onFaceCaptured is called directly after capture + descriptor processing.
+        // Parent component will decide what to do (e.g. show confirm, or proceed)
+        // For simplicity here, we just offer retake.
         <div className="flex gap-2 w-full">
-          <Button onClick={handleRetake} variant="outline" className="flex-1" disabled={cameraOperationInProgress.current || isStartingCamera}>
+          <Button onClick={handleRetake} variant="outline" className="w-full" disabled={cameraOperationInProgress.current || isStartingCamera}>
             <RefreshCw size={18} className="mr-2" />
             Retake
-          </Button>
-          <Button onClick={handleConfirm} className="flex-1">
-            <CheckCircle2 size={18} className="mr-2" />
-            Confirm Photo
           </Button>
         </div>
       )}
