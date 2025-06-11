@@ -1,15 +1,17 @@
+
 "use client";
 
 import type { User } from '@/types';
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import useLocalStorage from '@/hooks/use-local-storage';
 import { enhanceFaceImage, EnhanceFaceImageInput } from '@/ai/flows/enhance-face-image';
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 interface AuthContextType {
   user: User | null;
   users: User[];
   loading: boolean;
-  loginWithFace: (email: string, capturedFaceUri: string) => Promise<boolean>;
+  loginWithFace: (capturedFaceUri: string) => Promise<boolean>; // Email removed
   signup: (name: string, email: string, faceImageUri: string) => Promise<boolean>;
   logout: () => void;
   updateUserFaceAdmin: (userId: string, newFaceImageUri: string) => Promise<boolean>;
@@ -22,6 +24,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [users, setUsers] = useLocalStorage<User[]>('users', []);
   const [currentUser, setCurrentUser] = useLocalStorage<User | null>('currentUser', null);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast(); // Initialize toast
 
   useEffect(() => {
     setLoading(false);
@@ -34,30 +37,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return result.enhancedPhotoDataUri;
     } catch (error) {
       console.error("Error enhancing face image:", error);
+      // Toasting here might be too early if called from signup, signup should handle its own UI feedback.
       return null;
     }
   };
 
-  const loginWithFace = async (email: string, capturedFaceUri: string): Promise<boolean> => {
+  const loginWithFace = async (capturedFaceUri: string): Promise<boolean> => {
     setLoading(true);
-    const userToLogin = users.find(u => u.email === email);
 
-    if (userToLogin) {
-      // Simulate face comparison. In a real app, you'd compare feature vectors.
-      // For this demo, we'll just check if a face was captured.
-      // A more robust simulation might "compare" the new capture with the stored enhanced URI.
-      // For now, if user exists and face is provided, login succeeds.
-      // Let's simulate a delay for "processing"
-      await new Promise(resolve => setTimeout(resolve, 1500)); 
-      
-      // Simulate successful login if face is captured.
-      // In a real scenario, you'd use the capturedFaceUri to compare against userToLogin.enhancedFaceImageUri
-      if (capturedFaceUri) {
-        setCurrentUser(userToLogin);
-        setLoading(false);
-        return true;
-      }
+    if (users.length === 0) {
+      // The form will handle "No users registered" toast.
+      // This context method should primarily focus on the logic.
+      setLoading(false);
+      return false;
     }
+
+    // Simulate face recognition: For this prototype, if a face is captured
+    // and users exist, we "log in" the first registered user.
+    // This is a placeholder for a real face recognition system.
+    const userToLogin = users[0]; // Attempt to log in as the first user (usually admin).
+
+    if (userToLogin && capturedFaceUri) {
+      // Simulate a delay for "face processing"
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000)); // 1-2s delay
+      
+      setCurrentUser(userToLogin);
+      setLoading(false);
+      return true;
+    }
+    
+    // This path should ideally not be hit if users.length > 0 and capturedFaceUri is valid.
+    // If it is, it implies an unexpected issue or that capturedFaceUri became null somehow.
     setLoading(false);
     return false;
   };
@@ -66,14 +76,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(true);
     if (users.find(u => u.email === email)) {
       setLoading(false);
-      alert('User with this email already exists.');
+      toast({title: "Signup Failed", description: "User with this email already exists.", variant: "destructive"});
       return false;
     }
 
     const enhancedFaceImageUri = await enhanceAndSetFace(faceImageUri);
     if (!enhancedFaceImageUri) {
       setLoading(false);
-      alert('Failed to enhance face image. Please try again.');
+      toast({title: "Signup Failed", description: 'Failed to enhance face image. Please try again.', variant: "destructive"});
       return false;
     }
 
@@ -93,6 +103,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = () => {
     setCurrentUser(null);
+     // Optionally, redirect to login page after logout
+     // This is typically handled by components checking the user state.
   };
   
   const updateUserFaceAdmin = async (userId: string, newFaceImageUri: string): Promise<boolean> => {
@@ -100,21 +112,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const userIndex = users.findIndex(u => u.id === userId);
     if (userIndex === -1) {
       setLoading(false);
+      toast({title: "Update Failed", description: "User not found.", variant: "destructive"});
       return false;
     }
 
     const enhancedUri = await enhanceAndSetFace(newFaceImageUri);
     if (!enhancedUri) {
       setLoading(false);
-      alert('Failed to enhance new face image.');
+      toast({title: "Update Failed", description: 'Failed to enhance new face image.', variant: "destructive"});
       return false;
     }
 
     const updatedUsers = [...users];
     updatedUsers[userIndex] = {
       ...updatedUsers[userIndex],
-      faceImageUri: newFaceImageUri,
-      enhancedFaceImageUri: enhancedUri,
+      faceImageUri: newFaceImageUri, // Store original new capture
+      enhancedFaceImageUri: enhancedUri, // Store new enhanced image
     };
     setUsers(updatedUsers);
     
@@ -124,6 +137,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     setLoading(false);
+    // Toast for success is handled in UserManagementTable
     return true;
   };
 

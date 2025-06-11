@@ -1,9 +1,11 @@
+
 "use client";
 import ProtectedPage from '@/components/auth/protected-page';
 import { useAuth } from '@/contexts/auth-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Image from 'next/image';
+import { CheckCircle } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -30,36 +32,42 @@ export default function DashboardPage() {
               </Avatar>
             </div>
             <CardTitle className="text-3xl font-headline">Welcome, {user.name}!</CardTitle>
-            <CardDescription className="text-lg">This is your FaceLog dashboard.</CardDescription>
+            <CardDescription className="text-lg text-green-600 flex items-center justify-center gap-2">
+              <CheckCircle className="h-5 w-5" /> You have successfully logged in.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-4">
             <p className="text-center text-muted-foreground">
-              You have successfully logged in using face recognition.
+              This is your FaceLog dashboard. Here are the details associated with your account:
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-              <div>
-                <h3 className="font-semibold mb-2 text-center">Original Captured Face</h3>
-                <div className="aspect-square w-full max-w-[200px] mx-auto rounded-md overflow-hidden border bg-muted">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+              <div className="flex flex-col items-center p-4 border rounded-lg bg-card-foreground/5">
+                <h3 className="font-semibold mb-3 text-center text-primary">Original Captured Face</h3>
+                <div className="aspect-square w-full max-w-[200px] rounded-md overflow-hidden border-2 border-primary/20 bg-muted shadow-md">
                   {user.faceImageUri ? (
                     <Image src={user.faceImageUri} alt="Original face" width={200} height={200} className="object-cover w-full h-full" data-ai-hint="person face"/>
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground">No image</div>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground mt-2">This is the raw image captured during signup.</p>
               </div>
-              <div>
-                <h3 className="font-semibold mb-2 text-center">Enhanced Face for Login</h3>
-                 <div className="aspect-square w-full max-w-[200px] mx-auto rounded-md overflow-hidden border bg-muted">
+              <div className="flex flex-col items-center p-4 border rounded-lg bg-card-foreground/5">
+                <h3 className="font-semibold mb-3 text-center text-primary">Enhanced Face for Login</h3>
+                 <div className="aspect-square w-full max-w-[200px] rounded-md overflow-hidden border-2 border-primary/20 bg-muted shadow-md">
                   {user.enhancedFaceImageUri ? (
                      <Image src={user.enhancedFaceImageUri} alt="Enhanced face" width={200} height={200} className="object-cover w-full h-full" data-ai-hint="profile face" />
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground">No image</div>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground mt-2">This AI-enhanced image is used for login.</p>
               </div>
             </div>
              {user.isAdmin && (
-                <p className="text-center text-accent pt-4">You have admin privileges.</p>
+                <p className="text-center text-accent-foreground bg-accent/80 p-2 rounded-md font-semibold mt-6">
+                  You have admin privileges. You can manage users from the Admin Panel.
+                </p>
               )}
           </CardContent>
         </Card>
